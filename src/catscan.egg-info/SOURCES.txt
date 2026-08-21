@@ -1,9 +1,0 @@
-README.md
-pyproject.toml
-src/catscan/__init__.py
-src/catscan/main.py
-src/catscan.egg-info/PKG-INFO
-src/catscan.egg-info/SOURCES.txt
-src/catscan.egg-info/dependency_links.txt
-src/catscan.egg-info/entry_points.txt
-src/catscan.egg-info/top_level.txt
