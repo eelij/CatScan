@@ -1,51 +1,136 @@
 # CatScan
 
-CatScan is a command-line developer toolkit for analyzing, inspecting, and extracting Scratch projects (`.sb3`).
+> **CatScan** is a command-line developer toolkit for analyzing, inspecting, and extracting Scratch (`.sb3`) projects with clear formatting and terminal visualizers.
 
-## Features
+---
 
-- **Interactive Shell**
-  - Keeps the selected `.sb3` project in memory between commands.
-  - Provides an interactive terminal interface for working with Scratch projects.
+## ⚡ Features
 
-- **Project Inspector (`inspect`)**
-  - Displays a summary of the project's structure.
-  - Shows stages, sprites, scripts, blocks, variables, lists, broadcasts, costumes, and sounds.
-  - Displays information about individual targets and their resources.
+### 🖥️ Interactive Shell
 
-- **Project Extraction (`extract`)**
-  - Extracts the contents of an `.sb3` archive.
-  - Extracts `project.json`, costumes, sounds, and other project assets.
-  - Supports choosing a custom output directory.
+* **Persistent Context:** Keeps the selected `.sb3` file active in memory across commands.
+* **Streamlined Workflow:** Interactive prompt with project status indicators and custom navigation.
 
-- **Script Viewer (`script`)**
-  - Allows you to inspect the scripts of a specific sprite or the Stage.
-  - Supports nested loops and conditional blocks.
-  - Supports custom blocks and procedure calls.
-  - Displays block inputs, fields, and parameters.
-  - Uses indentation to make complex Scratch scripts easier to understand.
-  - Supports colored terminal output.
+### 🔍 Project Inspector (`inspect`)
 
-- **Script Export (`script save`)**
-  - Saves the scripts of a selected target to a text file.
-  - Automatically generates an output filename when one is not specified.
-  - Supports specifying a custom output file.
+* **Project Overview:** High-level metrics for stages, sprites, scripts, blocks, variables, lists, and broadcasts.
+* **Target Analysis:** Breakdown of costumes, sounds, and local vs. global variables per target.
 
-- **Command-line support**
-  - `inspect` and `extract` can be used directly without entering the interactive shell.
-  - Output can be piped into standard Unix tools such as `grep`, `awk`, and `less`.
+### 📦 Project Extraction (`extract`)
 
-## Requirements
+* **Asset Unpacker:** Extracts `project.json`, costumes, sounds, and graphics.
+* **Flexible Destination:** Output directly to current directory or specify custom destination paths.
 
-- Python 3.10 or newer
-- Linux or macOS
+### 📜 Script Viewer (`script`)
 
-The interactive target and script selection menus use `termios` and `tty`.
+* **Structured Code Output:** Indented, colored trees for complex scripts.
+* **Control Flow Support:** Renders nested loops, conditional branches (`if`/`else`), and custom procedure calls.
+* **Value Resolution:** Displays inline fields, variables, and input arguments directly.
 
-## Installation
+### 💾 Script Exporter (`script save`)
 
-Clone the repository:
+* **Text Export:** Dumps formatted AST-like script representation to plain text files.
+* **Automatic Naming:** Generates structured filenames by default or accepts custom paths.
+
+---
+
+## 📋 Requirements
+
+* **Python:** `3.10` or higher
+* **OS:** Linux or macOS (*interactive selector relies on `termios` and `tty*`)
+
+---
+
+## 🚀 Installation
 
 ```bash
-git clone https://github.com/eelijo/CatScan.git
+# Clone repository
+git clone https://github.com/eelij/CatScan.git
 cd CatScan
+
+# Install package
+python3 -m pip install .
+
+# Verify installation
+catscan --version
+
+```
+
+---
+
+## 💡 Usage
+
+### CLI Commands
+
+```bash
+# Inspect a project
+catscan inspect project.sb3
+
+# Extract assets to default folder
+catscan extract project.sb3
+
+# Extract assets to a specific directory
+catscan extract project.sb3 ./output_dir
+
+# View scripts interactively
+catscan script project.sb3
+
+# Save target scripts to a text file
+catscan script save project.sb3
+catscan script save project.sb3 output_scripts.txt
+
+```
+
+### Interactive Shell Session
+
+```bash
+$ catscan shell
+
+catscan> select project.sb3
+catscan(project.sb3)> inspect
+catscan(project.sb3)> script
+catscan(project.sb3)> script save
+catscan(project.sb3)> extract
+catscan(project.sb3)> help
+
+```
+
+---
+
+## 🛠️ Unix Pipeline Examples
+
+CatScan produces clean text output designed to integrate with standard CLI tools:
+
+```bash
+# Filter block metrics
+catscan inspect project.sb3 | grep "Blocks"
+
+# Search for procedure definitions (disable ANSI color codes for clean parsing)
+catscan script project.sb3 --no-color | grep "proccode:"
+
+# Page through large script outputs
+catscan script project.sb3 | less -R
+
+```
+
+---
+
+## 📖 Command Reference
+
+| Command | Usage | Description |
+| --- | --- | --- |
+| `shell` | `catscan shell` | Launches the interactive shell environment. |
+| `inspect` | `catscan inspect <file.sb3>` | Displays metadata and structure overview. |
+| `extract` | `catscan extract <file.sb3> [dir]` | Extracts project assets and JSON file. |
+| `script` | `catscan script <file.sb3>` | Opens the interactive visual script inspector. |
+| `script save` | `catscan script save <file.sb3> [out]` | Writes target scripts out to a file. |
+| `--version` | `catscan --version` | Displays current installed version. |
+| `--help` | `catscan --help` | Shows CLI usage and argument instructions. |
+
+---
+
+## 📄 License
+
+This project is licensed under the **MIT License**.
+
+Copyright (c) 2026 **eelij**
