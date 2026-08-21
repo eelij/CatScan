@@ -1,66 +1,67 @@
 # CatScan
 
-CatScan on komentorivipohjainen kehittäjän työkalu Scratch-projektien (`.sb3`) analysointiin, tarkasteluun ja purkamiseen.
+CatScan is a command-line development toolkit for analyzing, inspecting, and extracting Scratch projects (`.sb3`).
 
-CatScan on suunniteltu erityisesti Scratch-projektien rakenteen tutkimiseen suoraan terminaalista.
+CatScan is designed for exploring the structure and scripts of Scratch projects directly from the terminal.
 
-## Ominaisuudet
+## Features
 
 - **Interactive Shell**
-  - Valittu `.sb3`-projekti pysyy muistissa komentojen välillä.
-  - Projektia voi tarkastella useilla komennoilla ilman tiedoston uudelleen määrittämistä.
+  - Keeps the selected `.sb3` project in memory between commands.
+  - Allows you to inspect and work with the same project without repeatedly specifying the file.
 
 - **Project Inspector (`inspect`)**
-  - Näyttää projektin rakenteen ja tilastot.
-  - Hahmot ja Stage
-  - Skriptit
-  - Lohkot
-  - Muuttujat
-  - Listat
-  - Broadcastit
-  - Asut
-  - Äänet
-  - Kohdekohtaiset tiedot
+  - Displays a summary of the project's structure.
+  - Stages
+  - Sprites
+  - Scripts
+  - Blocks
+  - Variables
+  - Lists
+  - Broadcasts
+  - Costumes
+  - Sounds
+  - Target-specific information
 
 - **Project Extraction (`extract`)**
-  - Purkaa `.sb3`-tiedoston sisällön hakemistoon.
-  - Sisältää esimerkiksi:
+  - Extracts the contents of an `.sb3` project into a directory.
+  - Includes files such as:
     - `project.json`
-    - Asut
-    - Äänet
-    - Muut projektin resurssit
+    - Costumes
+    - Sounds
+    - Other project assets
 
 - **Script Inspector (`script`)**
-  - Näyttää Scratch-projektin skriptit suoraan terminaalissa.
-  - Kohteen ja skriptin voi valita interaktiivisesti.
-  - Tukee sisäkkäisiä rakenteita.
-  - Tukee ehtolauseita.
-  - Tukee silmukoita.
-  - Tukee mukautettuja lohkoja.
-  - Tukee `procedures_call`-kutsuja.
-  - Näyttää lohkot, kentät ja parametrit selkeästi sisennettynä.
-  - Tulostus toimii Unix-työkalujen, kuten `grep`, `awk` ja `sed`, kanssa.
+  - Displays Scratch scripts directly in the terminal.
+  - Allows you to select a target and a specific script interactively.
+  - Supports nested structures.
+  - Supports conditional statements.
+  - Supports loops.
+  - Supports custom blocks.
+  - Supports `procedures_call`.
+  - Displays blocks, fields, and parameters with clear indentation.
+  - Output works with standard Unix tools such as `grep`, `awk`, and `sed`.
 
 - **Script Saving (`script save`)**
-  - Skriptit voi tallentaa tekstitiedostoksi.
-  - Tiedostonimen voi antaa itse tai CatScan voi luoda sen automaattisesti.
+  - Saves scripts to a text file.
+  - Automatically generates a filename or allows you to specify one.
 
-- **ANSI-värit**
-  - Selkeä värikoodattu terminaalitulostus.
-  - Värit voi poistaa käytöstä `--no-color`-optiolla.
-  - Sopii hyvin komentojen pipe-käyttöön.
+- **ANSI Colors**
+  - Uses color-coded terminal output for improved readability.
+  - Colors can be disabled with `--no-color`.
+  - Designed to work well with Unix pipelines.
 
-## Vaatimukset
+## Requirements
 
-- Python 3.10 tai uudempi
-- Linux tai macOS
+- Python 3.10 or newer
+- Linux or macOS
 
-Interaktiiviset valikot käyttävät Pythonin `termios`- ja `tty`-moduuleita.
+Interactive menus use Python's `termios` and `tty` modules.
 
-## Asennus
+## Installation
 
-Kloonaa repository:
+Clone the repository:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/epulix77/CatScan.git
 cd CatScan
