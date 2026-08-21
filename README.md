@@ -85,9 +85,7 @@ Supported settings include:
 ```bash
 git clone https://github.com/eelij/CatScan.git
 cd CatScan
-
 python3 -m pip install .
-
 catscan --version
 ```
 
@@ -99,7 +97,7 @@ catscan --version
 
 Start CatScan:
 
-```bash
+```text
 catscan
 ```
 
@@ -137,7 +135,7 @@ Configure your API key:
 catscan > ai api
 ```
 
-Set an API endpoint:
+Set an AI endpoint:
 
 ```text
 catscan > ai url https://openrouter.ai/api/v1/chat/completions
@@ -179,7 +177,7 @@ Request a project modification:
 catscan > ai add a feature that makes the Rocketship change costume while flying
 ```
 
-CatScan will validate the proposed modification before asking whether it should be applied.
+CatScan validates the proposed modification before asking whether it should be applied.
 
 ---
 
@@ -257,39 +255,49 @@ catscan > select another_project.sb3
 
 ## 📖 Command Reference
 
-| Command                  | Description                               |
-| ------------------------ | ----------------------------------------- |
-| `select <file>`          | Select a Scratch `.sb3` project           |
-| `inspect`                | Inspect project structure and metadata    |
-| `extract`                | Extract project assets and `project.json` |
-| `script`                 | Open the interactive script viewer        |
-| `script save`            | Save target scripts to a text file        |
-| `script save <file>`     | Save scripts to a specified file          |
-| `ai api`                 | Set the AI API key securely               |
-| `ai url <url>`           | Set the AI API endpoint                   |
-| `ai model <model>`       | Set the AI model                          |
-| `ai timeout <seconds>`   | Set the AI request timeout                |
-| `ai max-tokens <amount>` | Set the maximum AI output tokens          |
-| `ai config`              | Display AI configuration                  |
-| `ai <prompt>`            | Ask the AI about the selected project     |
-| `clear`                  | Clear the terminal                        |
-| `version`                | Show CatScan version                      |
-| `help`                   | Show available commands                   |
-| `exit`                   | Exit CatScan                              |
-| `quit`                   | Exit CatScan                              |
+| Command                  | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `select <file>`          | Select a Scratch `.sb3` project                 |
+| `inspect`                | Inspect project structure and metadata          |
+| `extract`                | Extract project assets and `project.json`       |
+| `script`                 | Open the interactive script viewer              |
+| `script save`            | Save target scripts to a text file              |
+| `script save <file>`     | Save scripts to a specified file                |
+| `ai api`                 | Set the AI API key securely                     |
+| `ai url <url>`           | Set the AI API endpoint                         |
+| `ai model <model>`       | Set the AI model                                |
+| `ai timeout <seconds>`   | Set the AI request timeout                      |
+| `ai max-tokens <amount>` | Set the maximum AI output tokens                |
+| `ai config`              | Display AI configuration                        |
+| `ai <prompt>`            | Ask the AI about or modify the selected project |
+| `clear`                  | Clear the terminal                              |
+| `version`                | Show CatScan version                            |
+| `help`                   | Show available commands                         |
+| `exit`                   | Exit CatScan                                    |
+| `quit`                   | Exit CatScan                                    |
 
 ---
 
 ## 🛠️ Unix Pipeline Examples
 
-CatScan produces terminal output that can be combined with standard Unix tools.
+CatScan commands can be combined with standard Unix tools when command output is being piped or redirected.
+
+Filter output from a script export:
 
 ```bash
-catscan | grep "Blocks"
+catscan script project.sb3 --no-color | grep "proccode:"
+```
 
-catscan | grep "Variables"
+Search inspection output:
 
-catscan | less
+```bash
+catscan inspect project.sb3 | grep "Blocks"
+```
+
+Page through large script output:
+
+```bash
+catscan script project.sb3 --no-color | less
 ```
 
 ---
@@ -303,7 +311,7 @@ git clone https://github.com/eelij/CatScan.git
 cd CatScan
 ```
 
-Install the package:
+Install the package in editable mode:
 
 ```bash
 python3 -m pip install -e .
@@ -324,7 +332,10 @@ CatScan/
 ├── src/
 │   └── catscan/
 │       ├── __init__.py
-│       └── main.py
+│       ├── ai.py
+│       ├── config.py
+│       ├── main.py
+│       └── output.py
 ├── tests/
 │   └── test_catscan.py
 ├── pyproject.toml
