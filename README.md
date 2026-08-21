@@ -1,62 +1,46 @@
 # CatScan
 
-CatScan is a command-line development toolkit for analyzing, inspecting, and extracting Scratch projects (`.sb3`).
-
-CatScan is designed for exploring the structure and scripts of Scratch projects directly from the terminal.
+CatScan is a command-line developer toolkit for analyzing, inspecting, and extracting Scratch projects (`.sb3`).
 
 ## Features
 
 - **Interactive Shell**
   - Keeps the selected `.sb3` project in memory between commands.
-  - Allows you to inspect and work with the same project without repeatedly specifying the file.
+  - Provides an interactive terminal interface for working with Scratch projects.
 
 - **Project Inspector (`inspect`)**
   - Displays a summary of the project's structure.
-  - Stages
-  - Sprites
-  - Scripts
-  - Blocks
-  - Variables
-  - Lists
-  - Broadcasts
-  - Costumes
-  - Sounds
-  - Target-specific information
+  - Shows stages, sprites, scripts, blocks, variables, lists, broadcasts, costumes, and sounds.
+  - Displays information about individual targets and their resources.
 
 - **Project Extraction (`extract`)**
-  - Extracts the contents of an `.sb3` project into a directory.
-  - Includes files such as:
-    - `project.json`
-    - Costumes
-    - Sounds
-    - Other project assets
+  - Extracts the contents of an `.sb3` archive.
+  - Extracts `project.json`, costumes, sounds, and other project assets.
+  - Supports choosing a custom output directory.
 
-- **Script Inspector (`script`)**
-  - Displays Scratch scripts directly in the terminal.
-  - Allows you to select a target and a specific script interactively.
-  - Supports nested structures.
-  - Supports conditional statements.
-  - Supports loops.
-  - Supports custom blocks.
-  - Supports `procedures_call`.
-  - Displays blocks, fields, and parameters with clear indentation.
-  - Output works with standard Unix tools such as `grep`, `awk`, and `sed`.
+- **Script Viewer (`script`)**
+  - Allows you to inspect the scripts of a specific sprite or the Stage.
+  - Supports nested loops and conditional blocks.
+  - Supports custom blocks and procedure calls.
+  - Displays block inputs, fields, and parameters.
+  - Uses indentation to make complex Scratch scripts easier to understand.
+  - Supports colored terminal output.
 
-- **Script Saving (`script save`)**
-  - Saves scripts to a text file.
-  - Automatically generates a filename or allows you to specify one.
+- **Script Export (`script save`)**
+  - Saves the scripts of a selected target to a text file.
+  - Automatically generates an output filename when one is not specified.
+  - Supports specifying a custom output file.
 
-- **ANSI Colors**
-  - Uses color-coded terminal output for improved readability.
-  - Colors can be disabled with `--no-color`.
-  - Designed to work well with Unix pipelines.
+- **Command-line support**
+  - `inspect` and `extract` can be used directly without entering the interactive shell.
+  - Output can be piped into standard Unix tools such as `grep`, `awk`, and `less`.
 
 ## Requirements
 
 - Python 3.10 or newer
 - Linux or macOS
 
-Interactive menus use Python's `termios` and `tty` modules.
+The interactive target and script selection menus use `termios` and `tty`.
 
 ## Installation
 
@@ -64,8 +48,4 @@ Clone the repository:
 
 ```bash
 git clone https://github.com/eelijo/CatScan.git
-
 cd CatScan
-=======
-cd CatScan
-
