@@ -50,7 +50,7 @@ class TestCatScanConfigAndSanitization(unittest.TestCase):
     def test_load_config_gemini_env_key(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             dummy_path = Path(tmpdir) / "config.json"
-            with patch("catscan.main.get_config_path", return_value=dummy_path):
+            with patch("catscan.config.get_config_path", return_value=dummy_path):
                 with patch.dict(os.environ, {"GEMINI_API_KEY": "test_gemini_key"}, clear=True):
                     config = load_config()
                     self.assertEqual(config["api_key"], "test_gemini_key")
@@ -71,7 +71,7 @@ class TestCatScanConfigAndSanitization(unittest.TestCase):
                 "model": OLD_DEFAULT_MODEL
             }
             config_file.write_text(json.dumps(old_data), encoding="utf-8")
-            with patch("catscan.main.get_config_path", return_value=config_file):
+            with patch("catscan.config.get_config_path", return_value=config_file):
                 with patch.dict(os.environ, {}, clear=True):
                     config = load_config()
                     self.assertEqual(config["url"], DEFAULT_API_URL)
