@@ -63,5 +63,9 @@ Interactive menus use Python's `termios` and `tty` modules.
 Clone the repository:
 
 ```bash
-git clone https://github.com/epulix77/CatScan.git
+git clone https://github.com/eelijo/CatScan.git
+
 cd CatScan
+=======
+cd CatScan
+
