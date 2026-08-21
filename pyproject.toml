@@ -1,0 +1,15 @@
+[project]
+name = "catscan"
+version = "0.2.2"
+description = "CLI tool for inspecting, extracting, and visualizing Scratch (.sb3) projects"
+requires-python = ">=3.10"
+
+[project.scripts]
+catscan = "catscan.main:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
