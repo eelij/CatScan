@@ -54,7 +54,34 @@ TOP_LEVEL_SCRIPT_RULES = (
     "4. Shadow/menu blocks used as inputs are NOT independent top-level scripts.\n"
     "5. Shadow/menu blocks used as inputs should normally use topLevel=false and must have the correct parent reference to the block that contains them.\n"
     "6. Never create unrelated shadow/menu blocks with topLevel=true and parent=null when they are being used as inputs.\n"
-    "7. Use an existing equivalent shadow/menu block from the project as the exact template whenever possible.\n\n"
+    "7. Use an existing equivalent shadow/menu block from the project as the exact template whenever possible.\n"
+    "8. Reporter and boolean blocks used as inputs must not be left as separate visible top-level blocks.\n"
+    "9. If a reporter or boolean block is referenced by another block's input, treat it as part of that input tree, not as an independent script.\n"
+    "10. Reporter and boolean blocks that belong to an input tree must not be treated as independent scripts. Preserve the exact topLevel, parent, shadow, and coordinate structure used by equivalent blocks in the provided project.\n"
+    "12. Do not leave temporary, duplicate, helper, intermediate, or construction blocks visible on the workspace when they are already represented inside another block's input tree.\n"
+    "13. After constructing a modification, perform a final orphan-block check: every top-level block must either be a real script/event entry point or a block that Scratch intentionally stores independently, such as an appropriate shadow/menu block.\n\n"
+    "14. Before returning a modification, verify that every newly created top-level block is intentionally visible and reachable as a real script entry point or a project-specific structure that Scratch stores independently.\n"
+    "15. If a newly created block is only an intermediate reporter, operator, boolean, variable reporter, or nested input used by another block, it must not be left as a separate visible workspace block.\n"
+    "16. Never leave temporary construction blocks, duplicate helper blocks, or intermediate expression blocks outside the script that uses them.\n"
+)
+
+VARIABLE_SCOPE_RULES = (
+    "VARIABLE SCOPE AND OWNERSHIP RULES:\n"
+    "Scratch variables have two different scopes: global variables owned by the Stage, and local variables owned by an individual sprite.\n"
+    "A variable defined in the Stage target is global and can be referenced or modified by scripts in any sprite or in the Stage.\n"
+    "A variable defined inside a sprite target is local to that sprite and can only be directly referenced or modified by scripts belonging to that same sprite.\n"
+    "When reading the project.json, determine variable scope from which target contains the variable in its 'variables' object.\n"
+    "Never assume that two variables with the same name are the same variable.\n"
+    "Variable identity is determined by both variable name and variable ID, together with the owning target.\n"
+    "When referencing an existing variable, copy its exact name and ID from the variable definition in the owning target.\n"
+    "Never invent a variable ID.\n"
+    "If a sprite attempts to directly modify another sprite's local variable, do not generate an invalid data_setvariableto or data_changevariableby reference to that local variable.\n"
+    "When a requested feature requires one sprite to affect another sprite's local variable, use a valid cross-sprite mechanism such as a global Stage variable, broadcast messaging, or another explicitly supported project architecture.\n"
+    "Do not convert a local variable into a global variable unless the user explicitly requests that behavior or it is necessary to implement the requested feature and is explained clearly.\n"
+    "Prefer preserving the project's existing variable scope over changing variable ownership.\n"
+    "A global Stage variable may be referenced from a sprite even though the variable definition does not exist inside that sprite.\n"
+    "A local sprite variable must never be treated as globally accessible merely because another sprite uses the same variable name.\n"
+    "Before modifying variable blocks, verify the variable's owner, ID, and scope from the complete project.json.\n\n"
 )
 
 SHADOW_AND_MENU_BLOCK_RULES = (
@@ -109,7 +136,9 @@ VARIABLE_RULES = (
     "VARIABLE RULES:\n"
     "When referencing an existing variable, use the exact variable name and ID found in the project JSON.\n"
     "Do not create a second variable with the same logical name when the requested variable already exists.\n"
-    "When adding a new variable, use the modification format and let CatScan generate the final unique ID.\n\n"
+    "When adding a new variable, use the modification format and let CatScan generate the final unique ID.\n"
+    "Before using a variable in a block, verify which target owns the variable and whether it is global or local.\n"
+    "A Stage variable is globally accessible; a sprite variable is local to that sprite.\n\n"
 )
 
 OPCODE_REFERENCE = (
@@ -142,6 +171,11 @@ OPCODE_REFERENCE = (
     "- control_repeat: normally contains TIMES plus SUBSTACK.\n"
     "- control_wait: normally contains DURATION.\n"
     "Use the exact input arrays and parent relationships from equivalent blocks already present in the project.\n\n"
+
+    "IMPORTANT ORPHAN BLOCK RULE:\n"
+    "Do not create visible helper blocks for intermediate expressions when those expressions are already used directly as inputs.\n"
+    "For example, if a move block uses an expression such as (Pisteet / 2 + 3), create the reporter tree as the MOVE block's input and do not leave Pisteet, divide, or add as separate top-level blocks.\n"
+    "Every reporter/operator/boolean subtree must be attached to the block input that uses it.\n\n"
 
     "MOTION:\n"
     "- motion_movesteps: normally uses a STEPS input.\n"
@@ -211,6 +245,7 @@ _KNOWLEDGE_SECTIONS = (
     OPCODE_SAFETY,
     INPUT_SAFETY,
     VARIABLE_RULES,
+    VARIABLE_SCOPE_RULES,
     OPCODE_REFERENCE,
 )
 

@@ -575,9 +575,9 @@ def ai_command_flow(
     print()
 
     val_errors = validate_ai_modification_response(
-        modifications,
-        project_data
-    )
+    modifications,
+    project_data
+)
 
     if val_errors:
         print_error(
@@ -587,11 +587,20 @@ def ai_command_flow(
         for err in val_errors:
             print(f"  - {err}")
 
-        print_error(
-            "Modification aborted. Original .sb3 file remains untouched."
-        )
+        print()
+        force_confirm = input(
+            "Execute anyway? [y/N]: "
+        ).strip().lower()
 
-        return
+        if force_confirm not in ("y", "yes"):
+            print_error(
+                "Modification aborted. Original .sb3 file remains untouched."
+            )
+            return
+
+        print_info(
+            "Validation override enabled. Final project validation is still enforced."
+        )
 
     updated_project, stats = apply_project_changes(
         project_data,
