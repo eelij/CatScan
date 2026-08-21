@@ -21,6 +21,17 @@ from catscan.main import (
     OLD_DEFAULT_API_URL,
     OLD_DEFAULT_MODEL,
 )
+from catscan.ai import build_system_prompt
+from catscan.scratch_knowledge import (
+    build_scratch_knowledge_prompt,
+    get_general_json_rules,
+    get_input_rules,
+    get_menu_block_opcodes,
+    get_scratch_opcode_rules,
+    get_shadow_block_rules,
+    get_top_level_script_rules,
+    get_variable_rules,
+)
 
 
 class TestCatScanConfigAndSanitization(unittest.TestCase):
@@ -473,6 +484,91 @@ class TestScratchBlockSerialization(unittest.TestCase):
             self.assertIsInstance(saved_apple["b1"]["y"], (int, float))
             self.assertEqual(saved_apple["b2"]["parent"], "b1")
             self.assertFalse(saved_apple["b2"]["topLevel"])
+
+
+class TestScratchKnowledge(unittest.TestCase):
+    def test_build_scratch_knowledge_prompt_returns_nonempty_string(self):
+        prompt = build_scratch_knowledge_prompt()
+        self.assertIsInstance(prompt, str)
+        self.assertTrue(prompt.strip())
+
+    def test_knowledge_contains_key_scratch_rules(self):
+        prompt = build_scratch_knowledge_prompt()
+        for needle in (
+            "GENERAL SCRATCH JSON RULES:",
+            "TOP-LEVEL SCRIPT RULES:",
+            "SHADOW AND MENU BLOCK RULES:",
+            "KNOWN SCRATCH STRUCTURE EXAMPLES:",
+            "OPCODE SAFETY:",
+            "INPUT SAFETY:",
+            "VARIABLE RULES:",
+            "SUBSTACK",
+            "topLevel",
+            "parent",
+            "shadow",
+        ):
+            self.assertIn(needle, prompt)
+
+    def test_opcode_reference_covers_common_opcodes(self):
+        reference = get_scratch_opcode_rules()
+        for opcode in (
+            "event_whenflagclicked",
+            "control_forever",
+            "control_if",
+            "control_repeat",
+            "motion_movesteps",
+            "motion_pointtowards",
+            "motion_pointtowards_menu",
+            "motion_goto",
+            "motion_goto_menu",
+            "sensing_touchingobject",
+            "sensing_touchingobjectmenu",
+            "sensing_keypressed",
+            "sensing_keyoptions",
+            "looks_nextcostume",
+            "looks_switchcostumeto",
+            "looks_changeeffectby",
+            "looks_seteffectto",
+            "sound_play",
+            "sound_sounds_menu",
+            "data_setvariableto",
+            "data_changevariableby",
+            "operator_add",
+            "procedures_definition",
+            "procedures_prototype",
+            "procedures_call",
+        ):
+            self.assertIn(opcode, reference)
+
+    def test_helpers_return_sections(self):
+        self.assertIn("GENERAL SCRATCH JSON RULES:", get_general_json_rules())
+        self.assertIn("TOP-LEVEL SCRIPT RULES:", get_top_level_script_rules())
+        self.assertIn("SHADOW AND MENU BLOCK RULES:", get_shadow_block_rules())
+        self.assertIn("INPUT SAFETY:", get_input_rules())
+        self.assertIn("VARIABLE RULES:", get_variable_rules())
+        self.assertIn("OPCODE SAFETY:", get_scratch_opcode_rules())
+
+    def test_menu_block_opcodes_known_set(self):
+        opcodes = get_menu_block_opcodes()
+        for opcode in (
+            "motion_goto_menu",
+            "motion_pointtowards_menu",
+            "sensing_touchingobjectmenu",
+            "sensing_keyoptions",
+            "sound_sounds_menu",
+            "control_create_clone_of_menu",
+        ):
+            self.assertIn(opcode, opcodes)
+
+    def test_system_prompt_embeds_scratch_knowledge(self):
+        system = build_system_prompt()
+        knowledge = build_scratch_knowledge_prompt()
+        self.assertIsInstance(system, str)
+        self.assertGreater(len(system), len(knowledge))
+        self.assertIn(knowledge, system)
+        self.assertIn("CRITICAL MODIFICATION OUTPUT RULE:", system)
+        self.assertIn("MODIFICATION JSON SCHEMA:", system)
+        self.assertIn("FINAL SELF-CHECK BEFORE RETURNING JSON:", system)
 
 
 if __name__ == "__main__":

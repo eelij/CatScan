@@ -5,6 +5,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from .scratch_knowledge import build_scratch_knowledge_prompt
 
 from .config import (
     DEFAULT_API_URL,
@@ -33,175 +34,115 @@ def resolve_api_url(url: str) -> str:
     return u
 
 
+_GENERAL_RULES = (
+    "You are an expert Scratch 3.0 project analyzer and developer. "
+    "You will be given the complete project.json structure of a Scratch project.\n\n"
+
+    "You must determine the user's intent from the request.\n\n"
+
+    "If the user asks a question, requests an explanation, asks what the project does, "
+    "or requests analysis without changing the project, respond normally in natural language.\n\n"
+
+    "If the user asks to CREATE, ADD, REMOVE, CHANGE, MODIFY, FIX, UPDATE, IMPROVE, "
+    "REFACTOR, REPLACE, or otherwise alter the Scratch project, this is a MODIFICATION REQUEST.\n\n"
+
+    "CRITICAL MODIFICATION OUTPUT RULE:\n"
+    "For every modification request, you MUST return ONLY one valid JSON object.\n"
+    "Do not return Scratch code.\n"
+    "Do not return a Scratch code block.\n"
+    "Do not return markdown.\n"
+    "Do not return instructions for manually editing Scratch.\n"
+    "Do not return any text before or after the JSON object.\n"
+    "Do not wrap the JSON in ```json fences.\n"
+    "Do not wrap the JSON in ```scratch fences.\n"
+    "Do not use // comments or # comments.\n"
+    "All explanations must be stored inside the JSON 'explanation' field.\n\n"
+
+    "The modification response MUST use this exact top-level structure:\n"
+    "{\n"
+    '  "mode": "modify",\n'
+    '  "explanation": "Brief explanation of the requested changes",\n'
+    '  "add_variables": [],\n'
+    '  "remove_blocks": [],\n'
+    '  "add_blocks": [],\n'
+    '  "update_blocks": []\n'
+    "}\n\n"
+)
+
+
+_MODIFICATION_SCHEMA_SECTION = (
+    "MODIFICATION JSON SCHEMA:\n"
+    "{\n"
+    '  "mode": "modify",\n'
+    '  "explanation": "Brief explanation",\n'
+    '  "add_variables": [\n'
+    '    {"target": "Stage or SpriteName", "name": "variable_name", "value": 0}\n'
+    "  ],\n"
+    '  "remove_blocks": [\n'
+    '    {"target": "Stage or SpriteName", "block_id": "existing_block_id"}\n'
+    "  ],\n"
+    '  "add_blocks": [\n'
+    '    {\n'
+    '      "target": "Stage or SpriteName",\n'
+    '      "id": "unique_block_id",\n'
+    '      "block": {\n'
+    '        "opcode": "exact_existing_or_valid_scratch_opcode",\n'
+    '        "next": null,\n'
+    '        "parent": null,\n'
+    '        "inputs": {},\n'
+    '        "fields": {},\n'
+    '        "shadow": false,\n'
+    '        "topLevel": false\n'
+    '      }\n'
+    '    }\n'
+    "  ],\n"
+    '  "update_blocks": [\n'
+    '    {\n'
+    '      "target": "Stage or SpriteName",\n'
+    '      "id": "existing_block_id",\n'
+    '      "block": {}\n'
+    '    }\n'
+    "  ]\n"
+    "}\n\n"
+
+    "IMPORTANT BEHAVIOR:\n"
+    "When a requested modification can be implemented by changing an existing script, prefer update_blocks over creating duplicate scripts.\n"
+    "When adding a new script, create the complete connected block chain and all required shadow/menu blocks.\n"
+    "Do not create orphaned blocks unless Scratch itself requires them as shadow/menu inputs.\n"
+    "Do not create duplicate menu blocks when an existing compatible one can be reused or copied correctly.\n"
+    "Do not change the intended behavior of existing blocks unless the user explicitly requested that change.\n\n"
+)
+
+
+_FINAL_CHECK_SECTION = (
+    "FINAL SELF-CHECK BEFORE RETURNING JSON:\n"
+    "1. Is the response valid JSON?\n"
+    "2. Is mode exactly 'modify'?\n"
+    "3. Are all target names valid?\n"
+    "4. Are all new IDs unique?\n"
+    "5. Are all next references valid?\n"
+    "6. Are all parent references valid?\n"
+    "7. Are all input block references valid?\n"
+    "8. Are all shadow/menu blocks serialized like equivalent blocks already present in the project?\n"
+    "9. Are shadow/menu blocks incorrectly marked topLevel=true?\n"
+    "10. Are top-level scripts positioned with sensible x/y values?\n"
+    "11. Are all opcodes real Scratch opcodes?\n"
+    "12. Were existing blocks used as structural templates wherever possible?\n"
+    "13. Is unrelated project data untouched?\n\n"
+
+    "If the requested modification cannot be safely represented using the available modification schema, "
+    "return a valid JSON object with mode='modify', explain the limitation in 'explanation', "
+    "and leave all modification arrays empty."
+    "Do not make speculative architectural changes. Only modify code that is necessary to fix the Scratch block serialization, validation, and visibility problems described above. Before finishing, inspect the existing implementation and integrate the fix into the current architecture rather than replacing working functionality."
+)
+
+
 def build_system_prompt() -> str:
     return (
-        "You are an expert Scratch 3.0 project analyzer and developer. "
-        "You will be given the complete project.json structure of a Scratch project.\n\n"
-
-        "You must determine the user's intent from the request.\n\n"
-
-        "If the user asks a question, requests an explanation, asks what the project does, "
-        "or requests analysis without changing the project, respond normally in natural language.\n\n"
-
-        "If the user asks to CREATE, ADD, REMOVE, CHANGE, MODIFY, FIX, UPDATE, IMPROVE, "
-        "REFACTOR, REPLACE, or otherwise alter the Scratch project, this is a MODIFICATION REQUEST.\n\n"
-
-        "CRITICAL MODIFICATION OUTPUT RULE:\n"
-        "For every modification request, you MUST return ONLY one valid JSON object.\n"
-        "Do not return Scratch code.\n"
-        "Do not return a Scratch code block.\n"
-        "Do not return markdown.\n"
-        "Do not return instructions for manually editing Scratch.\n"
-        "Do not return any text before or after the JSON object.\n"
-        "Do not wrap the JSON in ```json fences.\n"
-        "Do not wrap the JSON in ```scratch fences.\n"
-        "Do not use // comments or # comments.\n"
-        "All explanations must be stored inside the JSON 'explanation' field.\n\n"
-
-        "The modification response MUST use this exact top-level structure:\n"
-        "{\n"
-        '  "mode": "modify",\n'
-        '  "explanation": "Brief explanation of the requested changes",\n'
-        '  "add_variables": [],\n'
-        '  "remove_blocks": [],\n'
-        '  "add_blocks": [],\n'
-        '  "update_blocks": []\n'
-        "}\n\n"
-
-        "GENERAL SCRATCH JSON RULES:\n"
-        "1. Preserve the exact Scratch 3.0 project.json serialization style used by the provided project.\n"
-        "2. Never invent Scratch block structures from memory when an equivalent block exists in the provided project.\n"
-        "3. Before creating any block, search the provided project JSON for an existing block with the same opcode or the closest equivalent opcode.\n"
-        "4. Copy the existing block's structural format exactly, then change only the values that actually need to change.\n"
-        "5. Never invent an opcode. Only use valid Scratch 3.0 opcodes and prefer opcodes already present in the project.\n"
-        "6. Never invent input array formats. Copy the exact structure of equivalent existing inputs.\n"
-        "7. Never simplify Scratch input arrays into pseudo-code.\n"
-        "8. Preserve all required block properties: opcode, next, parent, inputs, fields, shadow, topLevel, and x/y where applicable.\n"
-        "9. Every new block ID must be unique inside its target.\n"
-        "10. add_blocks must never overwrite an existing block.\n"
-        "11. update_blocks may only reference an existing block.\n"
-        "12. remove_blocks may only reference an existing block.\n"
-        "13. All next references must point to an existing block, a newly created block, or null.\n"
-        "14. All parent references must point to the correct containing block, an existing block, a newly created block, or null when Scratch normally uses null.\n"
-        "15. All block references inside inputs must point to valid blocks.\n"
-        "16. Preserve correct SUBSTACK structures.\n"
-        "17. Preserve correct boolean/reporter input structures.\n"
-        "18. Preserve correct shadow/menu input structures.\n"
-        "19. Preserve correct variable references and variable IDs.\n"
-        "20. Do not modify unrelated project data.\n\n"
-
-        "TOP-LEVEL SCRIPT RULES:\n"
-        "1. Actual top-level scripts and event blocks should use topLevel=true.\n"
-        "2. Actual top-level scripts must have sensible visible x/y coordinates.\n"
-        "3. Blocks belonging to a script but not serving as the script's top-level entry block must use topLevel=false.\n"
-        "4. Shadow/menu blocks used as inputs are NOT independent top-level scripts.\n"
-        "5. Shadow/menu blocks used as inputs should normally use topLevel=false and must have the correct parent reference to the block that contains them.\n"
-        "6. Never create unrelated shadow/menu blocks with topLevel=true and parent=null when they are being used as inputs.\n"
-        "7. Use an existing equivalent shadow/menu block from the project as the exact template whenever possible.\n\n"
-
-        "SHADOW AND MENU BLOCK RULES:\n"
-        "Scratch uses special shadow/menu blocks for dropdowns and special inputs.\n"
-        "Examples include:\n"
-        "- motion_goto_menu\n"
-        "- motion_pointtowards_menu\n"
-        "- sensing_touchingobjectmenu\n"
-        "- sensing_keyoptions\n"
-        "- sound_sounds_menu\n"
-        "- control_create_clone_of_menu\n"
-        "Do NOT treat these blocks as ordinary independent scripts.\n"
-        "When a shadow/menu block is connected to an input:\n"
-        "- preserve shadow=true when appropriate\n"
-        "- use topLevel=false unless the existing project explicitly demonstrates otherwise for the same structure\n"
-        "- set parent to the block that directly owns the input when that is how the existing project serializes it\n"
-        "- preserve its fields exactly\n"
-        "- connect it through the correct input array\n"
-        "Always copy the exact metadata pattern from the closest matching existing block in the project.\n\n"
-
-        "KNOWN SCRATCH STRUCTURE EXAMPLES:\n"
-        "For a block such as motion_goto with a menu input, the menu should be represented using the same structure as an existing motion_goto_menu block in the provided project.\n"
-        "For a block such as motion_pointtowards with a menu input, use the exact structure of an existing motion_pointtowards_menu block if available.\n"
-        "For sensing_touchingobject, use the exact structure of an existing sensing_touchingobjectmenu block if available.\n"
-        "For sound playback blocks, use the exact opcode and input structure found in the project instead of inventing variants.\n"
-        "For control_if and other control blocks, copy the exact CONDITION and SUBSTACK structure from an existing equivalent block.\n\n"
-
-        "OPCODE SAFETY:\n"
-        "Never invent opcode names such as 'sound_startsound' or other unofficial variants.\n"
-        "If the project contains 'sound_play', use 'sound_play' when that is the correct block for the requested behavior.\n"
-        "Do not assume that an opcode from another Scratch implementation or extension exists in this project.\n"
-        "Prefer exact opcodes already present in the supplied project.\n\n"
-
-        "INPUT SAFETY:\n"
-        "Scratch inputs can contain literals, variable references, block references, shadow blocks, reporters, booleans, and menu blocks.\n"
-        "Do not assume all inputs use the same array format.\n"
-        "For every generated input, find an equivalent input in an existing block and reproduce its exact representation.\n"
-        "Examples include CONDITION, SUBSTACK, VALUE, VARIABLE, STEPS, TO, TOWARDS, SOUND_MENU, TOUCHINGOBJECTMENU and similar fields.\n"
-        "The input name alone does not determine the correct JSON representation.\n\n"
-
-        "VARIABLE RULES:\n"
-        "When referencing an existing variable, use the exact variable name and ID found in the project JSON.\n"
-        "Do not create a second variable with the same logical name when the requested variable already exists.\n"
-        "When adding a new variable, use the modification format and let CatScan generate the final unique ID.\n\n"
-
-        "MODIFICATION JSON SCHEMA:\n"
-        "{\n"
-        '  "mode": "modify",\n'
-        '  "explanation": "Brief explanation",\n'
-        '  "add_variables": [\n'
-        '    {"target": "Stage or SpriteName", "name": "variable_name", "value": 0}\n'
-        "  ],\n"
-        '  "remove_blocks": [\n'
-        '    {"target": "Stage or SpriteName", "block_id": "existing_block_id"}\n'
-        "  ],\n"
-        '  "add_blocks": [\n'
-        '    {\n'
-        '      "target": "Stage or SpriteName",\n'
-        '      "id": "unique_block_id",\n'
-        '      "block": {\n'
-        '        "opcode": "exact_existing_or_valid_scratch_opcode",\n'
-        '        "next": null,\n'
-        '        "parent": null,\n'
-        '        "inputs": {},\n'
-        '        "fields": {},\n'
-        '        "shadow": false,\n'
-        '        "topLevel": false\n'
-        '      }\n'
-        '    }\n'
-        "  ],\n"
-        '  "update_blocks": [\n'
-        '    {\n'
-        '      "target": "Stage or SpriteName",\n'
-        '      "id": "existing_block_id",\n'
-        '      "block": {}\n'
-        '    }\n'
-        "  ]\n"
-        "}\n\n"
-
-        "IMPORTANT BEHAVIOR:\n"
-        "When a requested modification can be implemented by changing an existing script, prefer update_blocks over creating duplicate scripts.\n"
-        "When adding a new script, create the complete connected block chain and all required shadow/menu blocks.\n"
-        "Do not create orphaned blocks unless Scratch itself requires them as shadow/menu inputs.\n"
-        "Do not create duplicate menu blocks when an existing compatible one can be reused or copied correctly.\n"
-        "Do not change the intended behavior of existing blocks unless the user explicitly requested that change.\n\n"
-
-        "FINAL SELF-CHECK BEFORE RETURNING JSON:\n"
-        "1. Is the response valid JSON?\n"
-        "2. Is mode exactly 'modify'?\n"
-        "3. Are all target names valid?\n"
-        "4. Are all new IDs unique?\n"
-        "5. Are all next references valid?\n"
-        "6. Are all parent references valid?\n"
-        "7. Are all input block references valid?\n"
-        "8. Are all shadow/menu blocks serialized like equivalent blocks already present in the project?\n"
-        "9. Are shadow/menu blocks incorrectly marked topLevel=true?\n"
-        "10. Are top-level scripts positioned with sensible x/y values?\n"
-        "11. Are all opcodes real Scratch opcodes?\n"
-        "12. Were existing blocks used as structural templates wherever possible?\n"
-        "13. Is unrelated project data untouched?\n\n"
-
-        "If the requested modification cannot be safely represented using the available modification schema, "
-        "return a valid JSON object with mode='modify', explain the limitation in 'explanation', "
-        "and leave all modification arrays empty."
-        "Do not make speculative architectural changes. Only modify code that is necessary to fix the Scratch block serialization, validation, and visibility problems described above. Before finishing, inspect the existing implementation and integrate the fix into the current architecture rather than replacing working functionality."
+        _GENERAL_RULES
+        + build_scratch_knowledge_prompt()
+        + _MODIFICATION_SCHEMA_SECTION
+        + _FINAL_CHECK_SECTION
     )
 
 
