@@ -497,6 +497,26 @@ def parse_ai_response(
     return "chat", None
 
 
+MAX_CONVERSATION_MESSAGES = 12
+conversation_history: list[dict] = []
+
+
+def clear_conversation_history() -> None:
+    conversation_history.clear()
+
+
+def _append_user_message(content: str) -> None:
+    conversation_history.append({"role": "user", "content": content})
+    if len(conversation_history) > MAX_CONVERSATION_MESSAGES:
+        conversation_history[:] = conversation_history[-MAX_CONVERSATION_MESSAGES:]
+
+
+def _append_assistant_message(content: str) -> None:
+    conversation_history.append({"role": "assistant", "content": content})
+    if len(conversation_history) > MAX_CONVERSATION_MESSAGES:
+        conversation_history[:] = conversation_history[-MAX_CONVERSATION_MESSAGES:]
+
+
 def ai_command_flow(
     sb3_file: Path,
     prompt_text: str,
@@ -510,50 +530,59 @@ def ai_command_flow(
         validate_scratch_project_structure,
     )
 
-    project_data = get_project_data(
-        sb3_file
-    )
-
     system_prompt = build_system_prompt()
 
-    user_prompt = (
-        "Project data:\n"
-        + json.dumps(
-            project_data,
-            indent=2,
-            ensure_ascii=False
+    if not conversation_history:
+        project_data = get_project_data(
+            sb3_file
         )
-        + "\n\nUser Request: "
-        + prompt_text
-    )
 
-    messages = [
-        {
-            "role": "system",
-            "content": system_prompt
-        },
-        {
-            "role": "user",
-            "content": user_prompt
-        }
-    ]
+        user_prompt = (
+            "Project data:\n"
+            + json.dumps(
+                project_data,
+                indent=2,
+                ensure_ascii=False
+            )
+            + "\n\nUser Request: "
+            + prompt_text
+        )
+
+    else:
+        project_data = get_project_data(
+            sb3_file
+        )
+        user_prompt = prompt_text
+
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(conversation_history)
 
     print_info(
         "Sending request to AI model..."
     )
 
     try:
+        _append_user_message(user_prompt)
+        messages.append(
+            {"role": "user", "content": user_prompt}
+        )
+
         response_text = send_ai_request(
             config,
             messages
         )
 
     except Exception as e:
+        if conversation_history and conversation_history[-1].get("content") == user_prompt:
+            conversation_history.pop()
+
         safe_msg = sanitize_error_message(str(e), config.get("api_key"))
         print_error(
             f"AI API request failed: {safe_msg}"
         )
         return
+
+    _append_assistant_message(response_text)
 
     mode, modifications = parse_ai_response(
         response_text

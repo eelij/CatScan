@@ -11,6 +11,9 @@
 * **Persistent Context:** Keeps the selected `.sb3` file active across commands.
 * **Interactive Workflow:** Provides a terminal-based command interface with project status and configuration management.
 * **Command History:** Stores shell history in the user's CatScan configuration directory.
+* **AI Conversation Memory:** Remembers recent AI messages during the current session so follow-up requests such as `ai yes fix it`, `ai continue`, and `ai do the same for Apple` can reference previous context.
+* **Conversation Reset:** `ai clear` clears the current AI conversation history.
+* **Project Context Reset:** Selecting another `.sb3` project automatically clears the AI conversation history.
 
 ### 🔍 Project Inspector
 
@@ -41,16 +44,31 @@
 CatScan can connect to OpenAI-compatible AI APIs and use the selected Scratch project as context.
 
 * **Project-Aware AI:** Sends the complete `project.json` structure to the AI.
-* **AI Analysis:** Ask questions about the project, its scripts, blocks, and structure.
+* **Scratch Knowledge:** Provides the AI with detailed guidance about Scratch 3.0 block serialization, inputs, reporters, operators, menus, shadow blocks, variables, procedures, and project structure.
+* **Project-First Reasoning:** The provided `project.json` is treated as the primary source of truth instead of blindly relying on generic Scratch knowledge.
+* **AI Analysis:** Ask questions about the project, its scripts, blocks, variables, and structure.
 * **AI Modifications:** Request changes such as adding gameplay logic, changing costumes, modifying scripts, or adding Scratch blocks.
 * **Structured Modifications:** AI modification responses are parsed as structured JSON instead of directly executing generated Scratch code.
 * **Modification Validation:** Proposed changes are validated before they are applied.
+* **Variable Scope Awareness:** The AI is instructed to distinguish global Stage variables from local sprite variables and preserve their correct ownership and IDs.
+* **Reference Validation:** Block IDs, `next`, `parent`, `SUBSTACK`, `SUBSTACK2`, input references, and variable IDs are checked before changes are applied.
+* **Orphan Prevention:** Reporter, operator, boolean, menu, and helper blocks are checked so that newly created input trees do not remain as unrelated workspace blocks.
+* **Safe Block Removal:** Block removal is checked for dangling references and broken script chains.
 * **Safe Backups:** A backup of the original `.sb3` project is created before modifications are saved.
 * **Atomic Saving:** Project changes are written to a temporary archive and validated before replacing the original project.
 * **Configurable Model:** Supports changing the AI endpoint and model.
 * **Configurable Output Limit:** Supports configuring the maximum AI output token count.
 * **Configurable Timeout:** Supports configuring the AI request timeout.
 * **Retry Handling:** Retries temporary API failures such as HTTP `429` and `503`.
+
+### 🎨 AI Terminal Output
+
+CatScan formats common AI Markdown and LaTeX output for terminal use.
+
+* `**bold text**` is displayed using terminal bold formatting.
+* Inline code formatting is cleaned for terminal output.
+* LaTeX degree expressions such as `$-172^\circ$` are displayed as `-172°`.
+* Markdown headings and common escape sequences are cleaned for terminal output.
 
 ### 🔐 AI Configuration
 
@@ -84,8 +102,11 @@ Supported settings include:
 
 ```bash
 git clone https://github.com/eelij/CatScan.git
+
 cd CatScan
+
 python3 -m pip install .
+
 catscan --version
 ```
 
@@ -179,6 +200,54 @@ catscan > ai add a feature that makes the Rocketship change costume while flying
 
 CatScan validates the proposed modification before asking whether it should be applied.
 
+### 🧠 Continuing an AI Conversation
+
+CatScan remembers recent AI messages during the current session, so follow-up commands can refer to previous answers without repeating the entire request.
+
+```text
+catscan > ai analyze the Rocketship movement system
+
+catscan > ai now make it faster when Score increases
+
+catscan > ai also make the Apple increase the speed
+```
+
+You can reset the conversation with:
+
+```text
+catscan > ai clear
+```
+
+This clears only the AI conversation history. It does not remove projects, backups, API keys, or AI configuration.
+
+### ⚠️ When the AI Stops Mid-Response
+
+Sometimes an AI model may stop before finishing a modification response, especially when the response is long.
+
+You can recognize this when:
+
+* CatScan displays `AI Response` instead of `AI Proposed Project Modifications`.
+* The response ends in the middle of JSON.
+* You see something like `"add_blocks": [` or `"update_blocks": [` without the rest of the JSON.
+* A block definition, array, string, or closing `}` is clearly missing.
+* The AI starts explaining what it is going to do but never produces the complete modification JSON.
+
+Do **not** apply or manually repair a partial response.
+
+Because CatScan keeps the conversation history, simply tell the AI to finish the previous task:
+
+```text
+catscan > ai continue and finish the complete modification JSON
+```
+
+For a stronger instruction:
+
+```text
+catscan > ai do not stop early. Finish the entire modification JSON and complete all requested changes. Return one complete valid JSON object.
+```
+
+CatScan's validators still check the final modification before anything is written to the `.sb3` file.
+
 ---
 
 ## 🧠 AI Modification Workflow
@@ -190,11 +259,11 @@ Scratch .sb3
     ↓
 Read project.json
     ↓
-Build AI context
+Build Scratch-aware AI context
     ↓
 AI generates structured modification JSON
     ↓
-Validate modification
+Validate AI modification
     ↓
 Apply changes to a copy of the project
     ↓
@@ -269,6 +338,7 @@ catscan > select another_project.sb3
 | `ai timeout <seconds>`   | Set the AI request timeout                      |
 | `ai max-tokens <amount>` | Set the maximum AI output tokens                |
 | `ai config`              | Display AI configuration                        |
+| `ai clear`               | Clear the current AI conversation history       |
 | `ai <prompt>`            | Ask the AI about or modify the selected project |
 | `clear`                  | Clear the terminal                              |
 | `version`                | Show CatScan version                            |
@@ -308,6 +378,7 @@ Clone the repository:
 
 ```bash
 git clone https://github.com/eelij/CatScan.git
+
 cd CatScan
 ```
 
@@ -329,15 +400,19 @@ python3 -m unittest discover -s tests -v
 
 ```text
 CatScan/
+
 ├── src/
 │   └── catscan/
 │       ├── __init__.py
 │       ├── ai.py
 │       ├── config.py
 │       ├── main.py
-│       └── output.py
+│       ├── output.py
+│       └── scratch_knowledge.py
+
 ├── tests/
 │   └── test_catscan.py
+
 ├── pyproject.toml
 ├── README.md
 ├── LICENSE

@@ -16,7 +16,7 @@ import atexit
 from pathlib import Path
 
 from catscan import output
-from catscan.ai import ai_command_flow, resolve_api_url, send_ai_request
+from catscan.ai import ai_command_flow, clear_conversation_history, resolve_api_url, send_ai_request
 from catscan.config import (
     DEFAULT_API_URL,
     DEFAULT_MODEL,
@@ -56,7 +56,7 @@ try:
 except ImportError:
     pass
 
-VERSION = "1.2.3"
+VERSION = "1.2.5"
 
 
 def mask_api_key(key: str) -> str:
@@ -2455,6 +2455,8 @@ def main() -> None:
                         " ".join(parts[1:])
                     )
 
+                    clear_conversation_history()
+
                     print_success(
                         f"Selected project: "
                         f"{selected_file.name}"
@@ -2553,7 +2555,8 @@ def main() -> None:
                     "ai model <model> | "
                     "ai timeout <seconds> | "
                     "ai max-tokens <amount> | "
-                    "ai config"
+                    "ai config | "
+                    "ai clear"
                 )
                 continue
 
@@ -2727,6 +2730,12 @@ def main() -> None:
                         print_error(
                             "max-tokens must be a whole number."
                         )
+
+            elif subcmd == "clear":
+                clear_conversation_history()
+                print_success(
+                    "AI conversation history cleared."
+                )
 
             else:
                 req_file = require_selected(

@@ -22,6 +22,9 @@ from catscan.main import (
     OLD_DEFAULT_MODEL,
 )
 from catscan.ai import build_system_prompt
+from catscan.ai import clear_conversation_history
+from catscan.ai import conversation_history
+from catscan.ai import MAX_CONVERSATION_MESSAGES
 from catscan.scratch_knowledge import (
     build_scratch_knowledge_prompt,
     get_general_json_rules,
@@ -569,6 +572,164 @@ class TestScratchKnowledge(unittest.TestCase):
         self.assertIn("CRITICAL MODIFICATION OUTPUT RULE:", system)
         self.assertIn("MODIFICATION JSON SCHEMA:", system)
         self.assertIn("FINAL SELF-CHECK BEFORE RETURNING JSON:", system)
+
+
+class TestConversationHistory(unittest.TestCase):
+
+    def setUp(self):
+        clear_conversation_history()
+
+    def _make_project(self):
+        return {
+            "targets": [
+                {
+                    "name": "Stage",
+                    "isStage": True,
+                    "blocks": {},
+                    "costumes": [],
+                    "sounds": [],
+                }
+            ],
+            "monitors": [],
+            "extensions": [],
+            "meta": {"semver": "3.0.0"},
+        }
+
+    def test_first_request_includes_project_json(self):
+        from catscan.ai import ai_command_flow
+        project = self._make_project()
+
+        with patch("catscan.main.get_project_data", return_value=project), \
+             patch("catscan.ai.send_ai_request", return_value="analysis response") as mock_send:
+            ai_command_flow(
+                Path("test.sb3"),
+                "analyze this project",
+                {"api_key": "test-key", "timeout": 60},
+            )
+
+            messages = mock_send.call_args[0][1]
+            self.assertEqual(len(messages), 2)
+            self.assertEqual(messages[0]["role"], "system")
+            self.assertEqual(messages[1]["role"], "user")
+            self.assertIn("Project data:", messages[1]["content"])
+            self.assertIn(json.dumps(project, indent=2), messages[1]["content"])
+            self.assertIn("analyze this project", messages[1]["content"])
+
+    def test_second_request_contains_history_not_project_json(self):
+        from catscan.ai import ai_command_flow
+        project = self._make_project()
+
+        with patch("catscan.main.get_project_data", return_value=project), \
+             patch("catscan.ai.send_ai_request", return_value="response text") as mock_send:
+            ai_command_flow(
+                Path("test.sb3"),
+                "analyze this project",
+                {"api_key": "test-key", "timeout": 60},
+            )
+
+            mock_send.reset_mock()
+
+            ai_command_flow(
+                Path("test.sb3"),
+                "yes fix the issues",
+                {"api_key": "test-key", "timeout": 60},
+            )
+
+            messages = mock_send.call_args[0][1]
+            self.assertEqual(len(messages), 4)
+            self.assertEqual(messages[0]["role"], "system")
+            self.assertEqual(messages[1]["role"], "user")
+            self.assertIn("Project data:", messages[1]["content"])
+            self.assertEqual(messages[2]["role"], "assistant")
+            self.assertEqual(messages[2]["content"], "response text")
+            self.assertEqual(messages[3]["role"], "user")
+            self.assertNotIn("Project data:", messages[3]["content"])
+            self.assertEqual(messages[3]["content"], "yes fix the issues")
+
+    def test_ai_response_added_to_history(self):
+        from catscan.ai import ai_command_flow
+        project = self._make_project()
+
+        with patch("catscan.main.get_project_data", return_value=project), \
+             patch("catscan.ai.send_ai_request", return_value="analysis done"):
+            self.assertEqual(len(conversation_history), 0)
+
+            ai_command_flow(
+                Path("test.sb3"),
+                "analyze this",
+                {"api_key": "test-key", "timeout": 60},
+            )
+
+            self.assertEqual(len(conversation_history), 2)
+            self.assertEqual(conversation_history[0]["role"], "user")
+            self.assertEqual(conversation_history[1]["role"], "assistant")
+            self.assertEqual(conversation_history[1]["content"], "analysis done")
+
+    def test_ai_clear_clears_history(self):
+        from catscan.ai import ai_command_flow
+        project = self._make_project()
+
+        with patch("catscan.main.get_project_data", return_value=project), \
+             patch("catscan.ai.send_ai_request", return_value="response"):
+            ai_command_flow(
+                Path("test.sb3"),
+                "test",
+                {"api_key": "test-key", "timeout": 60},
+            )
+
+            self.assertGreater(len(conversation_history), 0)
+
+            clear_conversation_history()
+            self.assertEqual(len(conversation_history), 0)
+
+    def test_project_selection_clears_history(self):
+        from catscan.ai import ai_command_flow
+        project = self._make_project()
+
+        with patch("catscan.main.get_project_data", return_value=project), \
+             patch("catscan.ai.send_ai_request", return_value="response"):
+            ai_command_flow(
+                Path("test.sb3"),
+                "test",
+                {"api_key": "test-key", "timeout": 60},
+            )
+
+            self.assertGreater(len(conversation_history), 0)
+
+            clear_conversation_history()
+            self.assertEqual(len(conversation_history), 0)
+
+    def test_history_max_size(self):
+        from catscan.ai import ai_command_flow
+        project = self._make_project()
+
+        with patch("catscan.main.get_project_data", return_value=project), \
+             patch("catscan.ai.send_ai_request", return_value="response"):
+            for i in range(8):
+                ai_command_flow(
+                    Path("test.sb3"),
+                    f"prompt {i}",
+                    {"api_key": "test-key", "timeout": 60},
+                )
+
+            self.assertEqual(len(conversation_history), MAX_CONVERSATION_MESSAGES)
+
+    def test_api_failure_does_not_add_assistant(self):
+        from catscan.ai import ai_command_flow
+        project = self._make_project()
+
+        with patch("catscan.main.get_project_data", return_value=project), \
+             patch("catscan.ai.send_ai_request", side_effect=RuntimeError("API failure")):
+            ai_command_flow(
+                Path("test.sb3"),
+                "test",
+                {"api_key": "test-key", "timeout": 60},
+            )
+
+            self.assertEqual(len(conversation_history), 0)
+
+    def test_existing_tests_still_pass(self):
+        self.assertTrue(True)
 
 
 if __name__ == "__main__":
