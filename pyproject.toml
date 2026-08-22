@@ -1,6 +1,6 @@
 [project]
 name = "catscan"
-version = "1.2.5"
+version = "1.2.8"
 description = "CLI tool for inspecting, extracting, and visualizing Scratch (.sb3) projects"
 requires-python = ">=3.10"
 
