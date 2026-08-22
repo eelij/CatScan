@@ -13,6 +13,7 @@ from .output import (
     print_section,
 )
 from .scratch_patterns import build_scratch_patterns_prompt
+from .orphan_cleanup import cleanup_orphan_blocks
 
 from .config import (
     DEFAULT_API_URL,
@@ -25,6 +26,12 @@ from .output import (
     print_info,
     print_section,
 )
+
+_last_usage: dict | None = None
+
+
+def get_last_usage() -> dict | None:
+    return _last_usage
 
 
 def resolve_api_url(url: str) -> str:
@@ -117,7 +124,8 @@ _MODIFICATION_SCHEMA_SECTION = (
     "When adding a new script, create the complete connected block chain and all required shadow/menu blocks.\n"
     "Do not create orphaned blocks unless Scratch itself requires them as shadow/menu inputs.\n"
     "Do not create duplicate menu blocks when an existing compatible one can be reused or copied correctly.\n"
-    "Do not change the intended behavior of existing blocks unless the user explicitly requested that change.\n\n"
+    "Do not change the intended behavior of existing blocks unless the user explicitly requested that change.\n"
+    "Automatic orphan cleanup is performed by CatScan after modifications are applied. Do not enumerate or remove orphan blocks merely for cleanup. Focus the modification JSON on the user's requested changes. Only use remove_blocks when the user explicitly requests removal of a specific existing block or removal is directly required by the requested modification.\n\n"
 )
 
 
@@ -155,8 +163,13 @@ def build_system_prompt() -> str:
 
 
 def extract_ai_response_content(res_json: dict) -> str | None:
+    global _last_usage
     if not isinstance(res_json, dict):
         return None
+
+    usage = res_json.get("usage")
+    if isinstance(usage, dict):
+        _last_usage = usage
 
     choices = res_json.get("choices")
     if isinstance(choices, dict):
@@ -644,6 +657,8 @@ def ai_command_flow(
         modifications
     )
 
+    cleanup_stats = cleanup_orphan_blocks(updated_project)
+
     post_errors = validate_scratch_project_structure(
         updated_project
     )
@@ -681,6 +696,11 @@ def ai_command_flow(
     print(
         f"  Blocks removed:  {stats['blocks_removed']}"
     )
+
+    if cleanup_stats["blocks_removed"] > 0:
+        print(
+            f"  Automatically cleaned orphan blocks: {cleanup_stats['blocks_removed']}"
+        )
 
     print()
 

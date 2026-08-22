@@ -210,7 +210,16 @@ ORPHAN_RULES = (
     "4. A genuinely unreachable newly created block is invalid and must be removed before returning the modification.\n"
     "5. Never create duplicate helper blocks for the same expression if an equivalent existing block can be reused.\n"
     "6. Never leave temporary blocks used only during construction in the final modification.\n"
-    "7. Before returning, trace every newly created block through next, parent, and inputs and determine whether it is reachable from a valid script, procedure, or input tree.\n\n"
+    "7. Before returning, trace every newly created block through next, parent, and inputs and determine whether it is reachable from a valid script, procedure, or input tree.\n"
+    "8. A procedure argument reporter, custom block parameter reporter, procedures_prototype, procedures_definition, procedures_call, mutation-related structure, or other procedure-related block must not be classified as an orphan merely because it is not connected through a normal next chain.\n"
+    "9. Before removing any block, inspect whether it is referenced by inputs, next, parent, SUBSTACK, SUBSTACK2, procedure structures, mutations, or other project structures.\n"
+    "10. Only remove a block when it is provably unreachable and unused by the project.\n"
+    "11. Be conservative when identifying orphan blocks. If it is uncertain whether a block is intentionally stored as part of Scratch's project structure, do not remove it.\n"
+    "12. Never remove a block merely because it appears visually separate from a script in the Scratch workspace.\n"
+    "13. Do not interpret 'remove orphan blocks' as 'remove every block that is not part of an event chain'.\n"
+    "14. When a cleanup request identifies orphan blocks, remove only the blocks that are definitely unnecessary and leave uncertain or special Scratch structures untouched.\n"
+    "15. Before returning a modification containing remove_blocks, verify every proposed removal individually and ensure that no surviving block will reference a removed block.\n"
+    "16. Prefer removing a small number of definitely orphaned blocks over aggressively cleaning up uncertain structures.\n\n"
 )
 
 PROJECT_CONSISTENCY_RULES = (
@@ -238,6 +247,7 @@ MODIFICATION_REASONING_RULES = (
     "9. If several independent modifications are required, include all of them in one complete modification JSON when they can be represented safely.\n"
     "10. If one requested part cannot be represented safely, implement the safe parts only when doing so will not leave the project semantically inconsistent, and explain the unsupported part.\n"
     "11. Never stop after only one obvious change when the user explicitly requested all necessary fixes.\n\n"
+    "12. Cleanup requests must be conservative. Do not interpret 'remove orphan blocks' as 'remove every block that looks disconnected'. Only remove blocks that are provably unreachable and unused.\n"
 )
 
 FINAL_SELF_CHECK = (

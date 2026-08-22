@@ -16,6 +16,7 @@ import atexit
 from pathlib import Path
 
 from catscan import output
+from catscan.workspace import ensure_workspace, get_backups_path, get_scripts_path
 from catscan.ai import ai_command_flow, clear_conversation_history, resolve_api_url, send_ai_request
 from catscan.config import (
     DEFAULT_API_URL,
@@ -56,7 +57,7 @@ try:
 except ImportError:
     pass
 
-VERSION = "1.2.6"
+VERSION = "1.2.8"
 
 
 def mask_api_key(key: str) -> str:
@@ -1068,7 +1069,9 @@ def save_scripts_to_file(
     if out_file_str:
         out_path = Path(out_file_str).expanduser().resolve()
     else:
-        out_path = Path.cwd() / f"{sb3_file.stem}_scripts.txt"
+        scripts_dir = get_scripts_path(sb3_file)
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+        out_path = scripts_dir / f"{sb3_file.stem}_scripts.txt"
 
     content_colored = render_all_target_scripts(
         target,
@@ -2209,16 +2212,19 @@ def apply_project_changes(
 
 
 def create_safe_backup(sb3_file: Path) -> Path:
-    backup_file = sb3_file.with_suffix(
-        ".sb3.bak"
+    backups_dir = get_backups_path(sb3_file)
+    backups_dir.mkdir(parents=True, exist_ok=True)
+
+    backup_file = backups_dir / (
+        sb3_file.name + ".bak"
     )
 
     if backup_file.exists():
         counter = 1
 
         while True:
-            candidate = sb3_file.with_suffix(
-                f".sb3.bak.{counter}"
+            candidate = backups_dir / (
+                sb3_file.name + f".bak.{counter}"
             )
 
             if not candidate.exists():
@@ -2389,6 +2395,8 @@ def main() -> None:
                 args.file
             )
 
+            ensure_workspace(selected_file)
+
         except Exception as e:
             print_error(
                 str(e)
@@ -2454,6 +2462,8 @@ def main() -> None:
                     selected_file = select_file(
                         " ".join(parts[1:])
                     )
+
+                    ensure_workspace(selected_file)
 
                     clear_conversation_history()
 

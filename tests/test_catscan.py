@@ -24,7 +24,9 @@ from catscan.main import (
 from catscan.ai import build_system_prompt
 from catscan.ai import clear_conversation_history
 from catscan.ai import conversation_history
+from catscan.ai import get_last_usage
 from catscan.ai import MAX_CONVERSATION_MESSAGES
+from catscan.orphan_cleanup import cleanup_orphan_blocks
 from catscan.scratch_knowledge import (
     build_scratch_knowledge_prompt,
     get_general_json_rules,
@@ -95,6 +97,7 @@ class TestCatScanConfigAndSanitization(unittest.TestCase):
 
 class TestCatScanBackupAndFileOps(unittest.TestCase):
     def test_create_safe_backup_uses_shutil(self):
+        from catscan.workspace import get_backups_path
         with tempfile.TemporaryDirectory() as tmpdir:
             sb3_path = Path(tmpdir) / "project.sb3"
             sb3_path.write_bytes(b"scratch data")
@@ -102,13 +105,16 @@ class TestCatScanBackupAndFileOps(unittest.TestCase):
             self.assertTrue(backup1.exists())
             self.assertEqual(backup1.read_bytes(), b"scratch data")
             self.assertEqual(backup1.name, "project.sb3.bak")
+            self.assertEqual(backup1.parent, get_backups_path(sb3_path))
 
             backup2 = create_safe_backup(sb3_path)
             self.assertTrue(backup2.exists())
             self.assertEqual(backup2.name, "project.sb3.bak.1")
+            self.assertEqual(backup2.parent, get_backups_path(sb3_path))
 
     def test_save_project_atomic_succeeds(self):
         from catscan.main import save_project_atomic, get_project_data
+        from catscan.workspace import get_backups_path
         with tempfile.TemporaryDirectory() as tmpdir:
             sb3_path = Path(tmpdir) / "project.sb3"
             initial_project = {
@@ -141,7 +147,7 @@ class TestCatScanBackupAndFileOps(unittest.TestCase):
             save_project_atomic(sb3_path, updated_project)
             read_back = get_project_data(sb3_path)
             self.assertEqual(read_back["targets"][0]["variables"], {"var1": ["my_var", 0]})
-            self.assertTrue((Path(tmpdir) / "project.sb3.bak").exists())
+            self.assertTrue((get_backups_path(sb3_path) / "project.sb3.bak").exists())
 
 
 class TestGeminiApiRetries(unittest.TestCase):
@@ -499,7 +505,7 @@ class TestScratchKnowledge(unittest.TestCase):
         prompt = build_scratch_knowledge_prompt()
         for needle in (
             "GENERAL SCRATCH JSON RULES:",
-            "TOP-LEVEL SCRIPT RULES:",
+            "TOP-LEVEL AND WORKSPACE RULES:",
             "SHADOW AND MENU BLOCK RULES:",
             "KNOWN SCRATCH STRUCTURE EXAMPLES:",
             "OPCODE SAFETY:",
@@ -545,7 +551,7 @@ class TestScratchKnowledge(unittest.TestCase):
 
     def test_helpers_return_sections(self):
         self.assertIn("GENERAL SCRATCH JSON RULES:", get_general_json_rules())
-        self.assertIn("TOP-LEVEL SCRIPT RULES:", get_top_level_script_rules())
+        self.assertIn("TOP-LEVEL AND WORKSPACE RULES:", get_top_level_script_rules())
         self.assertIn("SHADOW AND MENU BLOCK RULES:", get_shadow_block_rules())
         self.assertIn("INPUT SAFETY:", get_input_rules())
         self.assertIn("VARIABLE RULES:", get_variable_rules())
@@ -730,6 +736,793 @@ class TestConversationHistory(unittest.TestCase):
 
     def test_existing_tests_still_pass(self):
         self.assertTrue(True)
+
+
+class TestWorkspace(unittest.TestCase):
+
+    def test_get_workspace_path_basic(self):
+        from catscan.workspace import get_workspace_path
+        result = get_workspace_path(Path("/tmp/Trampoline.sb3"))
+        self.assertEqual(result, Path("/tmp/Trampoline.sb3.catscan"))
+
+    def test_get_workspace_path_spaces(self):
+        from catscan.workspace import get_workspace_path
+        result = get_workspace_path(Path("/tmp/My Project.sb3"))
+        self.assertEqual(result, Path("/tmp/My Project.sb3.catscan"))
+
+    def test_get_workspace_path_multiple_dots(self):
+        from catscan.workspace import get_workspace_path
+        result = get_workspace_path(Path("/tmp/game.v2.final.sb3"))
+        self.assertEqual(result, Path("/tmp/game.v2.final.sb3.catscan"))
+
+    def test_workspace_directories_created(self):
+        from catscan.workspace import ensure_workspace, get_workspace_path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sb3_path = Path(tmpdir) / "project.sb3"
+            sb3_path.write_bytes(b"data")
+            ensure_workspace(sb3_path)
+            ws = get_workspace_path(sb3_path)
+            self.assertTrue(ws.exists())
+            self.assertTrue(ws.is_dir())
+
+    def test_backup_paths_use_workspace(self):
+        from catscan.workspace import get_backups_path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sb3_path = Path(tmpdir) / "project.sb3"
+            sb3_path.write_bytes(b"data")
+            backups = get_backups_path(sb3_path)
+            self.assertEqual(
+                backups,
+                Path(tmpdir) / "project.sb3.catscan" / "backups"
+            )
+
+    def test_script_save_defaults_to_workspace(self):
+        from catscan.main import save_scripts_to_file
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sb3_path = Path(tmpdir) / "project.sb3"
+            sb3_path.write_bytes(b"data")
+            target = {
+                "name": "Sprite1",
+                "blocks": {
+                    "b1": {
+                        "opcode": "event_whenflagclicked",
+                        "next": "b2",
+                        "parent": None,
+                        "inputs": {},
+                        "fields": {},
+                        "shadow": False,
+                        "topLevel": True,
+                        "x": 0,
+                        "y": 0,
+                    },
+                    "b2": {
+                        "opcode": "looks_say",
+                        "next": None,
+                        "parent": "b1",
+                        "inputs": {"MESSAGE": [1, [10, "Hello!"]]},
+                        "fields": {},
+                        "shadow": False,
+                        "topLevel": False,
+                    },
+                },
+                "costumes": [],
+                "sounds": [],
+            }
+            save_scripts_to_file(sb3_path, target, None)
+            expected = (
+                Path(tmpdir)
+                / "project.sb3.catscan"
+                / "scripts"
+                / "project_scripts.txt"
+            )
+            self.assertTrue(expected.exists())
+
+    def test_script_save_custom_path_preserved(self):
+        from catscan.main import save_scripts_to_file
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sb3_path = Path(tmpdir) / "project.sb3"
+            sb3_path.write_bytes(b"data")
+            custom = Path(tmpdir) / "custom_output.txt"
+            target = {
+                "name": "Sprite1",
+                "blocks": {
+                    "b1": {
+                        "opcode": "event_whenflagclicked",
+                        "next": "b2",
+                        "parent": None,
+                        "inputs": {},
+                        "fields": {},
+                        "shadow": False,
+                        "topLevel": True,
+                        "x": 0,
+                        "y": 0,
+                    },
+                    "b2": {
+                        "opcode": "looks_say",
+                        "next": None,
+                        "parent": "b1",
+                        "inputs": {"MESSAGE": [1, [10, "Hello!"]]},
+                        "fields": {},
+                        "shadow": False,
+                        "topLevel": False,
+                    },
+                },
+                "costumes": [],
+                "sounds": [],
+            }
+            save_scripts_to_file(sb3_path, target, str(custom))
+            self.assertTrue(custom.exists())
+            ws_scripts = (
+                Path(tmpdir)
+                / "project.sb3.catscan"
+                / "scripts"
+            )
+            self.assertFalse(ws_scripts.exists())
+
+    def test_different_projects_get_different_workspaces(self):
+        from catscan.workspace import get_workspace_path
+        ws1 = get_workspace_path(Path("/tmp/a.sb3"))
+        ws2 = get_workspace_path(Path("/tmp/b.sb3"))
+        self.assertNotEqual(ws1, ws2)
+
+    def test_backup_numbering_still_works(self):
+        from catscan.workspace import get_backups_path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sb3_path = Path(tmpdir) / "project.sb3"
+            sb3_path.write_bytes(b"data")
+            backup1 = create_safe_backup(sb3_path)
+            self.assertEqual(backup1.name, "project.sb3.bak")
+            backup2 = create_safe_backup(sb3_path)
+            self.assertEqual(backup2.name, "project.sb3.bak.1")
+            backup3 = create_safe_backup(sb3_path)
+            self.assertEqual(backup3.name, "project.sb3.bak.2")
+            backups = get_backups_path(sb3_path)
+            self.assertEqual(backup1.parent, backups)
+            self.assertEqual(backup2.parent, backups)
+            self.assertEqual(backup3.parent, backups)
+
+    def test_workspace_not_created_for_nonexistent_file(self):
+        from catscan.workspace import get_workspace_path
+        ws = get_workspace_path(Path("/tmp/noexist.sb3"))
+        self.assertFalse(ws.exists())
+
+
+class TestOrphanCleanup(unittest.TestCase):
+
+    def _make_project(self, blocks):
+        return {
+            "targets": [
+                {
+                    "name": "Stage",
+                    "isStage": True,
+                    "blocks": blocks,
+                    "costumes": [],
+                    "sounds": [],
+                }
+            ]
+        }
+
+    def test_genuinely_unreachable_block_is_removed(self):
+        project = self._make_project({
+            "b1": {
+                "opcode": "event_whenflagclicked",
+                "next": "b2",
+                "parent": None,
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": True,
+            },
+            "b2": {
+                "opcode": "motion_movesteps",
+                "next": None,
+                "parent": "b1",
+                "inputs": {"STEPS": [1, [10, "10"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+            "orphan": {
+                "opcode": "motion_movesteps",
+                "next": None,
+                "parent": None,
+                "inputs": {"STEPS": [1, [10, "50"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+        })
+        stats = cleanup_orphan_blocks(project)
+        blocks = project["targets"][0]["blocks"]
+        self.assertNotIn("orphan", blocks)
+        self.assertIn("b1", blocks)
+        self.assertIn("b2", blocks)
+        self.assertEqual(stats["blocks_removed"], 1)
+
+    def test_reporter_block_referenced_by_input_is_preserved(self):
+        project = self._make_project({
+            "b1": {
+                "opcode": "event_whenflagclicked",
+                "next": "b2",
+                "parent": None,
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": True,
+            },
+            "b2": {
+                "opcode": "operator_add",
+                "next": None,
+                "parent": "b1",
+                "inputs": {"NUM1": [1, [4, "10"]], "NUM2": [1, [4, "20"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+            "b3": {
+                "opcode": "motion_movesteps",
+                "next": None,
+                "parent": "b1",
+                "inputs": {"STEPS": [2, "b2"]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+        })
+        cleanup_orphan_blocks(project)
+        blocks = project["targets"][0]["blocks"]
+        self.assertIn("b2", blocks)
+
+    def test_nested_operator_tree_is_preserved(self):
+        project = self._make_project({
+            "b1": {
+                "opcode": "event_whenflagclicked",
+                "next": "b2",
+                "parent": None,
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": True,
+            },
+            "b2": {
+                "opcode": "operator_add",
+                "next": None,
+                "parent": "b1",
+                "inputs": {"NUM1": [2, "b3"], "NUM2": [1, [4, "5"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+            "b3": {
+                "opcode": "operator_multiply",
+                "next": None,
+                "parent": "b2",
+                "inputs": {"NUM1": [1, [4, "2"]], "NUM2": [1, [4, "3"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+        })
+        cleanup_orphan_blocks(project)
+        blocks = project["targets"][0]["blocks"]
+        self.assertIn("b2", blocks)
+        self.assertIn("b3", blocks)
+
+    def test_substack_block_is_preserved(self):
+        project = self._make_project({
+            "b1": {
+                "opcode": "event_whenflagclicked",
+                "next": "b2",
+                "parent": None,
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": True,
+            },
+            "b2": {
+                "opcode": "control_forever",
+                "next": None,
+                "parent": "b1",
+                "inputs": {"SUBSTACK": [2, "b3"]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+            "b3": {
+                "opcode": "motion_movesteps",
+                "next": None,
+                "parent": "b2",
+                "inputs": {"STEPS": [1, [10, "10"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+        })
+        cleanup_orphan_blocks(project)
+        blocks = project["targets"][0]["blocks"]
+        self.assertIn("b3", blocks)
+
+    def test_substack2_block_is_preserved(self):
+        project = self._make_project({
+            "b1": {
+                "opcode": "event_whenflagclicked",
+                "next": "b2",
+                "parent": None,
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": True,
+            },
+            "b2": {
+                "opcode": "control_if_else",
+                "next": None,
+                "parent": "b1",
+                "inputs": {
+                    "CONDITION": [2, "bCond"],
+                    "SUBSTACK": [2, "b3"],
+                    "SUBSTACK2": [2, "b4"],
+                },
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+            "bCond": {
+                "opcode": "sensing_touchingobject",
+                "next": None,
+                "parent": "b2",
+                "inputs": {"TOUCHINGOBJECTMENU": [1, "bMenu"]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+            "bMenu": {
+                "opcode": "sensing_touchingobjectmenu",
+                "next": None,
+                "parent": "bCond",
+                "inputs": {},
+                "fields": {"TOUCHINGOBJECTMENU": ["_mouse_", None]},
+                "shadow": True,
+                "topLevel": False,
+            },
+            "b3": {
+                "opcode": "motion_movesteps",
+                "next": None,
+                "parent": "b2",
+                "inputs": {"STEPS": [1, [10, "10"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+            "b4": {
+                "opcode": "motion_turnright",
+                "next": None,
+                "parent": "b2",
+                "inputs": {"DEGREES": [1, [10, "15"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+        })
+        cleanup_orphan_blocks(project)
+        blocks = project["targets"][0]["blocks"]
+        self.assertIn("b3", blocks)
+        self.assertIn("b4", blocks)
+        self.assertIn("bCond", blocks)
+        self.assertIn("bMenu", blocks)
+
+    def test_shadow_menu_block_used_by_input_is_preserved(self):
+        project = self._make_project({
+            "b1": {
+                "opcode": "event_whenflagclicked",
+                "next": "b2",
+                "parent": None,
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": True,
+            },
+            "b2": {
+                "opcode": "motion_goto",
+                "next": None,
+                "parent": "b1",
+                "inputs": {"TO": [1, "bMenu"]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+            "bMenu": {
+                "opcode": "motion_goto_menu",
+                "next": None,
+                "parent": "b2",
+                "inputs": {},
+                "fields": {"TO": ["_random_position_", None]},
+                "shadow": True,
+                "topLevel": False,
+            },
+        })
+        cleanup_orphan_blocks(project)
+        blocks = project["targets"][0]["blocks"]
+        self.assertIn("bMenu", blocks)
+
+    def test_procedure_definition_is_preserved(self):
+        project = self._make_project({
+            "b1": {
+                "opcode": "event_whenflagclicked",
+                "next": None,
+                "parent": None,
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": True,
+            },
+            "def1": {
+                "opcode": "procedures_definition",
+                "next": "body1",
+                "parent": None,
+                "inputs": {"custom_block": [1, "proto1"]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": True,
+            },
+            "proto1": {
+                "opcode": "procedures_prototype",
+                "next": None,
+                "parent": "def1",
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+                "mutation": {
+                    "tagName": "mutation",
+                    "proccode": "my block %s",
+                    "argumentnames": '["arg1"]',
+                    "argumentids": '["id1"]',
+                    "argumentdefaults": '[""]',
+                    "warp": "false",
+                },
+            },
+            "body1": {
+                "opcode": "motion_movesteps",
+                "next": None,
+                "parent": "def1",
+                "inputs": {"STEPS": [1, [10, "10"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+        })
+        cleanup_orphan_blocks(project)
+        blocks = project["targets"][0]["blocks"]
+        self.assertIn("def1", blocks)
+        self.assertIn("proto1", blocks)
+        self.assertIn("body1", blocks)
+
+    def test_procedure_call_block_is_preserved(self):
+        project = self._make_project({
+            "b1": {
+                "opcode": "event_whenflagclicked",
+                "next": "bCall",
+                "parent": None,
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": True,
+            },
+            "bCall": {
+                "opcode": "procedures_call",
+                "next": None,
+                "parent": "b1",
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+                "mutation": {
+                    "tagName": "mutation",
+                    "proccode": "my block %s",
+                    "argumentnames": '["arg1"]',
+                    "argumentids": '["id1"]',
+                    "argumentdefaults": '[""]',
+                    "warp": "false",
+                },
+            },
+        })
+        cleanup_orphan_blocks(project)
+        blocks = project["targets"][0]["blocks"]
+        self.assertIn("bCall", blocks)
+
+
+
+    def test_cleanup_removes_only_real_orphan(self):
+        project = {
+            "targets": [
+                {
+                    "name": "hitbox",
+                    "isStage": False,
+                    "blocks": {
+                        "event": {
+                            "opcode": "event_whenflagclicked",
+                            "next": "move",
+                            "parent": None,
+                            "inputs": {},
+                            "fields": {},
+                            "shadow": False,
+                            "topLevel": True,
+                        },
+                        "move": {
+                            "opcode": "motion_movesteps",
+                            "next": None,
+                            "parent": "event",
+                            "inputs": {
+                                "STEPS": [1, [4, "10"]]
+                            },
+                            "fields": {},
+                            "shadow": False,
+                            "topLevel": False,
+                        },
+                        "real_orphan": {
+                            "opcode": "operator_add",
+                            "next": None,
+                            "parent": None,
+                            "inputs": {
+                                "NUM2": [1, [4, "50"]]
+                            },
+                            "fields": {},
+                            "shadow": False,
+                            "topLevel": False,
+                        },
+                        "procedure_argument": {
+                            "opcode": "argument_reporter_string_number",
+                            "next": None,
+                            "parent": "procedure_body",
+                            "inputs": {},
+                            "fields": {
+                                "VALUE": ["jump height", None]
+                            },
+                            "shadow": False,
+                            "topLevel": False,
+                        },
+                        "procedure_body": {
+                            "opcode": "motion_changeyby",
+                            "next": None,
+                            "parent": "procedure_definition",
+                            "inputs": {
+                                "DY": [1, "procedure_argument"]
+                            },
+                            "fields": {},
+                            "shadow": False,
+                            "topLevel": False,
+                        },
+                        "procedure_definition": {
+                            "opcode": "procedures_definition",
+                            "next": "procedure_body",
+                            "parent": None,
+                            "inputs": {},
+                            "fields": {},
+                            "shadow": False,
+                            "topLevel": True,
+                        },
+                    },
+                }
+            ]
+        }
+
+        result = cleanup_orphan_blocks(project)
+
+        blocks = project["targets"][0]["blocks"]
+
+        self.assertEqual(result["blocks_removed"], 1)
+        self.assertNotIn("real_orphan", blocks)
+        self.assertIn("procedure_argument", blocks)
+        self.assertIn("procedure_body", blocks)
+        self.assertIn("procedure_definition", blocks)
+
+
+
+    def test_block_with_valid_parent_input_relationship_is_preserved(self):
+        project = self._make_project({
+            "b1": {
+                "opcode": "event_whenflagclicked",
+                "next": "b2",
+                "parent": None,
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": True,
+            },
+            "b2": {
+                "opcode": "control_repeat",
+                "next": None,
+                "parent": "b1",
+                "inputs": {
+                    "TIMES": [1, [6, "3"]],
+                    "SUBSTACK": [2, "b3"],
+                },
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+            "b3": {
+                "opcode": "looks_say",
+                "next": None,
+                "parent": "b2",
+                "inputs": {"MESSAGE": [1, [10, "Hello"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+        })
+        cleanup_orphan_blocks(project)
+        blocks = project["targets"][0]["blocks"]
+        self.assertIn("b1", blocks)
+        self.assertIn("b2", blocks)
+        self.assertIn("b3", blocks)
+
+    def test_cleanup_leaves_no_dangling_references(self):
+        project = self._make_project({
+            "b1": {
+                "opcode": "event_whenflagclicked",
+                "next": "b2",
+                "parent": None,
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": True,
+            },
+            "b2": {
+                "opcode": "motion_movesteps",
+                "next": None,
+                "parent": "b1",
+                "inputs": {"STEPS": [1, [10, "10"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+            "orphan1": {
+                "opcode": "motion_movesteps",
+                "next": "orphan2",
+                "parent": None,
+                "inputs": {"STEPS": [1, [10, "10"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+            "orphan2": {
+                "opcode": "motion_movesteps",
+                "next": None,
+                "parent": "orphan1",
+                "inputs": {"STEPS": [1, [10, "10"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+        })
+        cleanup_orphan_blocks(project)
+        blocks = project["targets"][0]["blocks"]
+        self.assertNotIn("orphan1", blocks)
+        self.assertNotIn("orphan2", blocks)
+        for bid, block in blocks.items():
+            nxt = block.get("next")
+            if nxt:
+                self.assertIn(nxt, blocks)
+            parent = block.get("parent")
+            if parent:
+                self.assertIn(parent, blocks)
+
+    def test_cleanup_is_idempotent(self):
+        project = self._make_project({
+            "b1": {
+                "opcode": "event_whenflagclicked",
+                "next": None,
+                "parent": None,
+                "inputs": {},
+                "fields": {},
+                "shadow": False,
+                "topLevel": True,
+            },
+            "orphan": {
+                "opcode": "motion_movesteps",
+                "next": None,
+                "parent": None,
+                "inputs": {"STEPS": [1, [10, "10"]]},
+                "fields": {},
+                "shadow": False,
+                "topLevel": False,
+            },
+        })
+        stats1 = cleanup_orphan_blocks(project)
+        stats2 = cleanup_orphan_blocks(project)
+        self.assertEqual(stats1["blocks_removed"], 1)
+        self.assertEqual(stats2["blocks_removed"], 0)
+
+    def test_multiple_targets_independent_cleanup(self):
+        project = {
+            "targets": [
+                {
+                    "name": "Stage",
+                    "isStage": True,
+                    "blocks": {
+                        "b1": {
+                            "opcode": "event_whenflagclicked",
+                            "next": None,
+                            "parent": None,
+                            "inputs": {},
+                            "fields": {},
+                            "shadow": False,
+                            "topLevel": True,
+                        },
+                    },
+                    "costumes": [],
+                    "sounds": [],
+                },
+                {
+                    "name": "Sprite1",
+                    "isStage": False,
+                    "blocks": {
+                        "b2": {
+                            "opcode": "event_whenflagclicked",
+                            "next": None,
+                            "parent": None,
+                            "inputs": {},
+                            "fields": {},
+                            "shadow": False,
+                            "topLevel": True,
+                        },
+                        "orphan_s": {
+                            "opcode": "motion_movesteps",
+                            "next": None,
+                            "parent": None,
+                            "inputs": {"STEPS": [1, [10, "10"]]},
+                            "fields": {},
+                            "shadow": False,
+                            "topLevel": False,
+                        },
+                    },
+                    "costumes": [],
+                    "sounds": [],
+                },
+            ]
+        }
+        stats = cleanup_orphan_blocks(project)
+        self.assertEqual(stats["blocks_removed"], 1)
+        self.assertIn("Sprite1", stats["targets_affected"])
+        self.assertNotIn("Stage", stats["targets_affected"])
+        self.assertNotIn("orphan_s", project["targets"][1]["blocks"])
+
+    def test_system_prompt_mentions_orphan_cleanup(self):
+        prompt = build_system_prompt()
+        self.assertIn("Automatic orphan cleanup is performed by CatScan", prompt)
+
+
+class TestTokenUsage(unittest.TestCase):
+
+    def test_usage_captured_from_api_response(self):
+        from catscan.ai import extract_ai_response_content
+        response = {
+            "choices": [
+                {"message": {"content": "hello"}}
+            ],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "total_tokens": 150,
+            },
+        }
+        content = extract_ai_response_content(response)
+        self.assertEqual(content, "hello")
+        usage = get_last_usage()
+        self.assertIsNotNone(usage)
+        self.assertEqual(usage["prompt_tokens"], 100)
+        self.assertEqual(usage["completion_tokens"], 50)
+
+    def test_no_usage_when_not_provided(self):
+        from catscan.ai import extract_ai_response_content
+        response = {
+            "choices": [
+                {"message": {"content": "hello"}}
+            ],
+        }
+        content = extract_ai_response_content(response)
+        self.assertEqual(content, "hello")
 
 
 if __name__ == "__main__":
