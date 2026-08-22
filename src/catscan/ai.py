@@ -12,6 +12,7 @@ from .output import (
     print_info,
     print_section,
 )
+from .scratch_patterns import build_scratch_patterns_prompt
 
 from .config import (
     DEFAULT_API_URL,
@@ -147,6 +148,7 @@ def build_system_prompt() -> str:
     return (
         _GENERAL_RULES
         + build_scratch_knowledge_prompt()
+        + build_scratch_patterns_prompt()
         + _MODIFICATION_SCHEMA_SECTION
         + _FINAL_CHECK_SECTION
     )

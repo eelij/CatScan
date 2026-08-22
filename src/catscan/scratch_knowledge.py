@@ -88,7 +88,15 @@ TOP_LEVEL_SCRIPT_RULES = (
     "8. Every newly created reporter/operator/boolean/input subtree must be reachable from a real script, procedure structure, or a valid input of a reachable block.\n"
     "9. Remove temporary construction blocks before returning the modification.\n"
     "10. Before returning a modification, perform an orphan analysis over every new block.\n"
-    "11. A top-level block is not automatically an error merely because it is not an event block; determine its intended role from the project structure and equivalent examples.\n\n"
+    "11. A top-level block is not automatically an error merely because it is not an event block; determine its intended role from the project structure and equivalent examples.\n"
+    "12. Prefer continuous boolean sensing inside a loop for behavior that should be checked continuously over time.\n"
+    "13. For continuously changing input states such as held keyboard keys, mouse state, touching conditions, or similar conditions, prefer a forever loop with an if condition using an appropriate boolean sensing block when the project supports that structure.\n"
+    "14. Prefer patterns such as forever -> if <key [right arrow] pressed?> then -> action for continuous keyboard control instead of relying on a one-time key event.\n"
+    "15. Do not automatically replace every event block with a boolean polling loop. Use event blocks when the behavior is naturally event-driven, such as green-flag initialization, broadcasts, custom events, or actions that should trigger once per event.\n"
+    "16. For sprite clicking, a when this sprite clicked event is valid for simple one-shot click actions. Use a boolean polling structure only when the project or requested behavior actually provides an appropriate boolean condition for continuous interaction.\n"
+    "17. Never invent a boolean sensing block such as a nonexistent 'this sprite is clicked' reporter. Only use boolean blocks that are valid Scratch blocks and are supported by the project or authoritative Scratch structure.\n"
+    "18. When choosing between an event block and a boolean polling pattern, choose the structure that matches the behavior: continuous state checks should prefer boolean polling, while discrete one-time events should prefer event blocks.\n"
+    "19. When adding input handling to an existing project, inspect how similar input is already implemented and preserve a consistent pattern unless the user explicitly requests a different architecture.\n\n"
 )
 
 VARIABLE_SCOPE_RULES = (
@@ -338,6 +346,8 @@ OPCODE_REFERENCE = (
     "- control_create_clone_of_menu\n"
     "Treat these according to exact project serialization.\n\n"
 )
+
+
 
 _KNOWLEDGE_SECTIONS = (
     GENERAL_JSON_RULES,

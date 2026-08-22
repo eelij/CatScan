@@ -56,7 +56,7 @@ try:
 except ImportError:
     pass
 
-VERSION = "1.2.5"
+VERSION = "1.2.6"
 
 
 def mask_api_key(key: str) -> str:
