@@ -1,3 +1,5 @@
+import re
+
 RESET = "\033[0m"
 BOLD = "\033[1m"
 
@@ -26,6 +28,61 @@ def print_info(message: str) -> None:
 def print_section(title: str) -> None:
     print()
     print(f"{BOLD}{BLUE}{title}{RESET}")
+
+
+def format_ai_response(text: str) -> str:
+    if not isinstance(text, str):
+        return str(text)
+
+    text = re.sub(
+        r"\$\s*([^\$]*?)\\circ\s*\$",
+        lambda match: f"{match.group(1).strip()}°",
+        text
+    )
+
+    text = re.sub(
+        r"\$\s*([^\$]+?)\s*\$",
+        lambda match: match.group(1),
+        text
+    )
+
+    text = re.sub(
+        r"\*\*(.+?)\*\*",
+        lambda match: f"{BOLD}{match.group(1)}{RESET}",
+        text
+    )
+
+    text = re.sub(
+        r"(?<!\*)\*([^*\n]+)\*(?!\*)",
+        lambda match: match.group(1),
+        text
+    )
+
+    text = re.sub(
+        r"`([^`\n]+)`",
+        lambda match: match.group(1),
+        text
+    )
+
+    text = re.sub(
+        r"^#{1,6}\s+",
+        "",
+        text,
+        flags=re.MULTILINE
+    )
+
+    text = text.replace("\\_", "_")
+    text = text.replace("\\*", "*")
+    text = text.replace("\\#", "#")
+    text = text.replace("\\-", "-")
+    text = text.replace("\\+", "+")
+    text = text.replace("\\=", "=")
+
+    return text
+
+
+def print_ai_response(text: str) -> None:
+    print(format_ai_response(text))
 
 
 def disable_colors() -> None:

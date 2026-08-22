@@ -6,6 +6,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from .scratch_knowledge import build_scratch_knowledge_prompt
+from .output import (
+    print_ai_response,
+    print_error,
+    print_info,
+    print_section,
+)
 
 from .config import (
     DEFAULT_API_URL,
@@ -555,7 +561,7 @@ def ai_command_flow(
 
     if mode == "chat" or modifications is None:
         print_section("AI Response")
-        print(response_text)
+        print_ai_response(response_text)
         print()
         return
 
