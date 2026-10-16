@@ -21,7 +21,7 @@ from catscan.main import (
     OLD_DEFAULT_API_URL,
     OLD_DEFAULT_MODEL,
 )
-from catscan.ai import build_system_prompt
+from catscan.ai import build_system_prompt, build_project_payload
 from catscan.ai import clear_conversation_history
 from catscan.ai import conversation_history
 from catscan.ai import get_last_usage
@@ -618,7 +618,7 @@ class TestConversationHistory(unittest.TestCase):
             self.assertEqual(messages[0]["role"], "system")
             self.assertEqual(messages[1]["role"], "user")
             self.assertIn("Project data:", messages[1]["content"])
-            self.assertIn(json.dumps(project, indent=2), messages[1]["content"])
+            self.assertIn(build_project_payload(project), messages[1]["content"])
             self.assertIn("analyze this project", messages[1]["content"])
 
     def test_second_request_contains_history_not_project_json(self):
@@ -734,8 +734,55 @@ class TestConversationHistory(unittest.TestCase):
 
             self.assertEqual(len(conversation_history), 0)
 
-    def test_existing_tests_still_pass(self):
-        self.assertTrue(True)
+    def test_changed_project_resends_fresh_snapshot(self):
+        from catscan.ai import ai_command_flow
+        project = self._make_project()
+        cfg = {"api_key": "test-key", "timeout": 60}
+
+        with patch("catscan.main.get_project_data", return_value=project), \
+             patch("catscan.ai.send_ai_request", return_value="ok") as mock_send:
+            ai_command_flow(Path("test.sb3"), "first", cfg)
+
+            project["targets"][0]["blocks"] = {"b1": {"opcode": "event_whenflagclicked"}}
+            ai_command_flow(Path("test.sb3"), "second", cfg)
+
+            messages = mock_send.call_args[0][1]
+            self.assertIn("b1", messages[-1]["content"])
+            self.assertIn("Project data:", messages[-1]["content"])
+            self.assertNotIn("Project data:", messages[1]["content"])
+            self.assertIn("first", messages[1]["content"])
+
+
+class TestPromptSize(unittest.TestCase):
+    def test_build_project_payload_is_compact_and_non_mutating(self):
+        project = {
+            "targets": [{
+                "name": "Stage", "isStage": True, "x": 5,
+                "costumes": [{"name": "c"}], "sounds": [{"name": "s"}],
+                "variables": {}, "blocks": {"a": {"opcode": "x"}},
+            }],
+            "monitors": [{"id": 1}], "meta": {"semver": "3.0.0"},
+        }
+        snapshot = json.loads(json.dumps(project))
+        payload = build_project_payload(project)
+        self.assertEqual(project, snapshot)
+        self.assertNotIn("\n", payload)
+        self.assertNotIn("costumes", payload)
+        self.assertNotIn("monitors", payload)
+        self.assertNotIn('"variables"', payload)
+        self.assertIn('"a":{"opcode":"x"}', payload)
+
+    def test_select_patterns_matches_alias_only(self):
+        from catscan.scratch_patterns import select_patterns, build_scratch_patterns_prompt
+        self.assertIn("smooth_size", select_patterns("please smoothly grow the cat"))
+        self.assertEqual(select_patterns("say hello"), [])
+        self.assertLess(
+            len(build_scratch_patterns_prompt("say hello")),
+            len(build_scratch_patterns_prompt()) // 4,
+        )
+
+    def test_system_prompt_size_ceiling(self):
+        self.assertLess(len(build_system_prompt("say hello")) // 4, 6000)
 
 
 class TestWorkspace(unittest.TestCase):

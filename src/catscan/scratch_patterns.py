@@ -869,37 +869,79 @@ def get_patterns_by_category(category: str) -> dict[str, dict]:
     }
 
 
-def build_scratch_patterns_prompt() -> str:
-    sections = [
-        "SCRATCH PROGRAMMING PATTERNS:\n",
-        "The following are reusable Scratch programming patterns and community-style techniques.\n",
-        "Patterns are suggestions, not mandatory implementations.\n",
-        "When a user refers to one of these patterns, identify the intended technique and adapt it to the provided project.\n",
-        "Do not blindly copy a pattern. Preserve the project's existing variables, targets, scripts, block structures, and behavior whenever possible.\n",
-        "For Scratch-specific tricks, preserve the exact Scratch behavior described by the pattern.\n\n",
-    ]
+def select_patterns(user_text: str) -> list[str]:
+    text = (user_text or "").lower()
+    if not text:
+        return []
+
+    matched = []
 
     for pattern_id, pattern in SCRATCH_PATTERNS.items():
-        sections.append(f"PATTERN: {pattern['name']}\n")
-        sections.append(f"ID: {pattern_id}\n")
-        sections.append(f"CATEGORY: {pattern['category']}\n")
-        sections.append(f"DESCRIPTION: {pattern['description']}\n")
-        sections.append("ALIASES: " + ", ".join(pattern.get("aliases", [])) + "\n")
-        sections.append(f"PATTERN: {pattern['pattern']}\n")
+        needles = [pattern_id.replace("_", " "), pattern["name"].lower()]
+        needles.extend(a.lower() for a in pattern.get("aliases", []))
 
-        if pattern.get("example"):
-            sections.append(f"EXAMPLE: {pattern['example']}\n")
+        if any(needle in text for needle in needles):
+            matched.append(pattern_id)
 
-        if pattern.get("rules"):
-            sections.append("RULES:\n")
-            for rule in pattern["rules"]:
-                sections.append(f"- {rule}\n")
+    return matched
 
-        if pattern.get("scratch_specific"):
-            sections.append("SCRATCH_SPECIFIC: true\n")
-        else:
-            sections.append("SCRATCH_SPECIFIC: false\n")
 
-        sections.append("\n")
+def _format_pattern(pattern_id: str, pattern: dict) -> list[str]:
+    lines = [
+        f"PATTERN: {pattern['name']}\n",
+        f"ID: {pattern_id}\n",
+        f"CATEGORY: {pattern['category']}\n",
+        f"DESCRIPTION: {pattern['description']}\n",
+        "ALIASES: " + ", ".join(pattern.get("aliases", [])) + "\n",
+        f"PATTERN: {pattern['pattern']}\n",
+    ]
+
+    if pattern.get("example"):
+        lines.append(f"EXAMPLE: {pattern['example']}\n")
+
+    if pattern.get("rules"):
+        lines.append("RULES:\n")
+        for rule in pattern["rules"]:
+            lines.append(f"- {rule}\n")
+
+    lines.append(
+        "SCRATCH_SPECIFIC: true\n"
+        if pattern.get("scratch_specific")
+        else "SCRATCH_SPECIFIC: false\n"
+    )
+    lines.append("\n")
+    return lines
+
+
+def build_scratch_patterns_prompt(user_text: str | None = None) -> str:
+    sections = [
+        "SCRATCH PROGRAMMING PATTERNS:\n",
+        "Reusable Scratch techniques. They are suggestions, not mandatory implementations. "
+        "When the user refers to one, adapt it to the provided project and preserve its existing "
+        "variables, targets, scripts, and behavior. Preserve exact behavior of Scratch-specific tricks.\n\n",
+    ]
+
+    if user_text is None:
+        for pattern_id, pattern in SCRATCH_PATTERNS.items():
+            sections.extend(_format_pattern(pattern_id, pattern))
+        return "".join(sections)
+
+    matched = select_patterns(user_text)
+
+    for pattern_id in matched:
+        sections.extend(_format_pattern(pattern_id, SCRATCH_PATTERNS[pattern_id]))
+
+    others = [
+        f"{pattern_id} ({pattern['name']})"
+        for pattern_id, pattern in SCRATCH_PATTERNS.items()
+        if pattern_id not in matched
+    ]
+
+    if others:
+        sections.append(
+            "Other known patterns (details omitted unless the request names them): "
+            + ", ".join(others)
+            + "\n\n"
+        )
 
     return "".join(sections)

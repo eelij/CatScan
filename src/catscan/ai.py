@@ -50,37 +50,15 @@ def resolve_api_url(url: str) -> str:
 
 _GENERAL_RULES = (
     "You are an expert Scratch 3.0 project analyzer and developer. "
-    "You will be given the complete project.json structure of a Scratch project.\n\n"
+    "You are given the project.json structure of a Scratch project (compact JSON; costumes, sounds, and layout data are omitted).\n\n"
 
-    "You must determine the user's intent from the request.\n\n"
-
-    "If the user asks a question, requests an explanation, asks what the project does, "
-    "or requests analysis without changing the project, respond normally in natural language.\n\n"
-
-    "If the user asks to CREATE, ADD, REMOVE, CHANGE, MODIFY, FIX, UPDATE, IMPROVE, "
-    "REFACTOR, REPLACE, or otherwise alter the Scratch project, this is a MODIFICATION REQUEST.\n\n"
+    "Decide the user's intent. If they ask a question, want an explanation, or want analysis without changing the project, answer in plain natural language.\n"
+    "If they ask to create, add, remove, change, fix, update, improve, refactor, or replace anything in the project, it is a MODIFICATION REQUEST.\n\n"
 
     "CRITICAL MODIFICATION OUTPUT RULE:\n"
-    "For every modification request, you MUST return ONLY one valid JSON object.\n"
-    "Do not return Scratch code.\n"
-    "Do not return a Scratch code block.\n"
-    "Do not return markdown.\n"
-    "Do not return instructions for manually editing Scratch.\n"
-    "Do not return any text before or after the JSON object.\n"
-    "Do not wrap the JSON in ```json fences.\n"
-    "Do not wrap the JSON in ```scratch fences.\n"
-    "Do not use // comments or # comments.\n"
-    "All explanations must be stored inside the JSON 'explanation' field.\n\n"
-
-    "The modification response MUST use this exact top-level structure:\n"
-    "{\n"
-    '  "mode": "modify",\n'
-    '  "explanation": "Brief explanation of the requested changes",\n'
-    '  "add_variables": [],\n'
-    '  "remove_blocks": [],\n'
-    '  "add_blocks": [],\n'
-    '  "update_blocks": []\n'
-    "}\n\n"
+    "For a modification request return ONLY one valid JSON object: no text before or after, no markdown, no code fences, no comments, "
+    "and no Scratch code or manual instructions. Put all explanations in the 'explanation' field. "
+    "The top-level keys must be exactly: mode, explanation, add_variables, remove_blocks, add_blocks, update_blocks, and mode must be 'modify'.\n\n"
 )
 
 
@@ -89,76 +67,76 @@ _MODIFICATION_SCHEMA_SECTION = (
     "{\n"
     '  "mode": "modify",\n'
     '  "explanation": "Brief explanation",\n'
-    '  "add_variables": [\n'
-    '    {"target": "Stage or SpriteName", "name": "variable_name", "value": 0}\n'
-    "  ],\n"
-    '  "remove_blocks": [\n'
-    '    {"target": "Stage or SpriteName", "block_id": "existing_block_id"}\n'
-    "  ],\n"
-    '  "add_blocks": [\n'
-    '    {\n'
-    '      "target": "Stage or SpriteName",\n'
-    '      "id": "unique_block_id",\n'
-    '      "block": {\n'
-    '        "opcode": "exact_existing_or_valid_scratch_opcode",\n'
-    '        "next": null,\n'
-    '        "parent": null,\n'
-    '        "inputs": {},\n'
-    '        "fields": {},\n'
-    '        "shadow": false,\n'
-    '        "topLevel": false\n'
-    '      }\n'
-    '    }\n'
-    "  ],\n"
-    '  "update_blocks": [\n'
-    '    {\n'
-    '      "target": "Stage or SpriteName",\n'
-    '      "id": "existing_block_id",\n'
-    '      "block": {}\n'
-    '    }\n'
-    "  ]\n"
-    "}\n\n"
+    '  "add_variables": [{"target": "Stage or SpriteName", "name": "variable_name", "value": 0}],\n'
+    '  "remove_blocks": [{"target": "Stage or SpriteName", "block_id": "existing_block_id"}],\n'
+    '  "add_blocks": [{"target": "Stage or SpriteName", "id": "unique_block_id", "block": {"opcode": "valid_scratch_opcode", "next": null, "parent": null, "inputs": {}, "fields": {}, "shadow": false, "topLevel": false}}],\n'
+    '  "update_blocks": [{"target": "Stage or SpriteName", "id": "existing_block_id", "block": {}}]\n'
+    "}\n"
+    "Empty arrays are fine for operations you do not need.\n\n"
 
-    "IMPORTANT BEHAVIOR:\n"
-    "When a requested modification can be implemented by changing an existing script, prefer update_blocks over creating duplicate scripts.\n"
-    "When adding a new script, create the complete connected block chain and all required shadow/menu blocks.\n"
-    "Do not create orphaned blocks unless Scratch itself requires them as shadow/menu inputs.\n"
-    "Do not create duplicate menu blocks when an existing compatible one can be reused or copied correctly.\n"
-    "Do not change the intended behavior of existing blocks unless the user explicitly requested that change.\n"
-    "Automatic orphan cleanup is performed by CatScan after modifications are applied. Do not enumerate or remove orphan blocks merely for cleanup. Focus the modification JSON on the user's requested changes. Only use remove_blocks when the user explicitly requests removal of a specific existing block or removal is directly required by the requested modification.\n\n"
+    "HOW CHANGES ARE APPLIED:\n"
+    "- update_blocks shallow-merges the keys you give into the existing block. A key you include (inputs, fields, next, parent) replaces that whole key, so write its complete new value.\n"
+    "- Prefer update_blocks on an existing script over creating a duplicate script. A new script needs its complete connected chain plus all required shadow/menu blocks.\n"
+    "- Automatic orphan cleanup is performed by CatScan after changes are applied. Use remove_blocks only when the user asks to remove a specific block or the change requires it.\n\n"
+
+    "EXAMPLE (append 'change x by 10' after existing block \"abc\", the last block of a script):\n"
+    '{"mode":"modify","explanation":"Added change x by 10 after the last block.","add_variables":[],"remove_blocks":[],'
+    '"add_blocks":[{"target":"Sprite1","id":"newx1","block":{"opcode":"motion_changexby","next":null,"parent":"abc","inputs":{"DX":[1,[4,"10"]]},"fields":{},"shadow":false,"topLevel":false}}],'
+    '"update_blocks":[{"target":"Sprite1","id":"abc","block":{"next":"newx1"}}]}\n\n'
 )
 
 
 _FINAL_CHECK_SECTION = (
     "FINAL SELF-CHECK BEFORE RETURNING JSON:\n"
-    "1. Is the response valid JSON?\n"
-    "2. Is mode exactly 'modify'?\n"
-    "3. Are all target names valid?\n"
-    "4. Are all new IDs unique?\n"
-    "5. Are all next references valid?\n"
-    "6. Are all parent references valid?\n"
-    "7. Are all input block references valid?\n"
-    "8. Are all shadow/menu blocks serialized like equivalent blocks already present in the project?\n"
-    "9. Are shadow/menu blocks incorrectly marked topLevel=true?\n"
-    "10. Are top-level scripts positioned with sensible x/y values?\n"
-    "11. Are all opcodes real Scratch opcodes?\n"
-    "12. Were existing blocks used as structural templates wherever possible?\n"
-    "13. Is unrelated project data untouched?\n\n"
-
-    "If the requested modification cannot be safely represented using the available modification schema, "
-    "return a valid JSON object with mode='modify', explain the limitation in 'explanation', "
-    "and leave all modification arrays empty."
-    "Do not make speculative architectural changes. Only modify code that is necessary to fix the Scratch block serialization, validation, and visibility problems described above. Before finishing, inspect the existing implementation and integrate the fix into the current architecture rather than replacing working functionality."
+    "1. Complete, valid JSON; mode is 'modify'; all six keys present; target names exist in the project.\n"
+    "2. New IDs are unique and exact; every next, parent, SUBSTACK, and input reference resolves; no placeholder IDs.\n"
+    "3. Variable names, IDs, and scopes are exact.\n"
+    "4. Every new block is reachable from a script or input; no duplicate helpers; removals leave no dangling references.\n"
+    "5. Shadow/menu blocks and topLevel/parent/shadow/x/y values are copied from equivalent project blocks; unrelated data is untouched.\n"
+    "If the request cannot be safely represented by this schema, return mode 'modify' with empty arrays and explain the limitation in 'explanation'.\n"
 )
 
 
-def build_system_prompt() -> str:
+def build_system_prompt(user_text: str | None = None) -> str:
     return (
         _GENERAL_RULES
         + build_scratch_knowledge_prompt()
-        + build_scratch_patterns_prompt()
+        + build_scratch_patterns_prompt(user_text)
         + _MODIFICATION_SCHEMA_SECTION
         + _FINAL_CHECK_SECTION
+    )
+
+
+_PROMPT_TARGET_KEYS = ("name", "isStage", "variables", "lists", "broadcasts", "blocks")
+_REQUEST_MARKER = "\n\nUser Request: "
+_SNAPSHOT_OMITTED = "[Earlier project snapshot omitted; a newer one follows.]"
+
+
+def build_project_payload(project_data: dict) -> str:
+    """Compact, prompt-only view of a project. Never mutates project_data."""
+    targets = []
+
+    for target in project_data.get("targets", []):
+        if not isinstance(target, dict):
+            continue
+
+        slim = {}
+        for key in _PROMPT_TARGET_KEYS:
+            value = target.get(key)
+            if key in ("name", "isStage") or value:
+                if key in target:
+                    slim[key] = value
+        targets.append(slim)
+
+    payload = {"targets": targets}
+
+    if project_data.get("extensions"):
+        payload["extensions"] = project_data["extensions"]
+
+    return json.dumps(
+        payload,
+        separators=(",", ":"),
+        ensure_ascii=False
     )
 
 
@@ -516,8 +494,28 @@ MAX_CONVERSATION_MESSAGES = 12
 conversation_history: list[dict] = []
 
 
+_last_sent_payload: str | None = None
+
+
 def clear_conversation_history() -> None:
+    global _last_sent_payload
     conversation_history.clear()
+    _last_sent_payload = None
+
+
+def _drop_old_snapshots() -> None:
+    for message in conversation_history:
+        content = message.get("content")
+        if (
+            message.get("role") == "user"
+            and isinstance(content, str)
+            and content.startswith("Project data:")
+            and _REQUEST_MARKER in content
+        ):
+            request = content.split(_REQUEST_MARKER, 1)[1]
+            message["content"] = (
+                _SNAPSHOT_OMITTED + _REQUEST_MARKER + request
+            )
 
 
 def _append_user_message(content: str) -> None:
@@ -545,29 +543,36 @@ def ai_command_flow(
         validate_scratch_project_structure,
     )
 
-    system_prompt = build_system_prompt()
+    global _last_sent_payload
 
-    if not conversation_history:
-        project_data = get_project_data(
-            sb3_file
-        )
+    system_prompt = build_system_prompt(prompt_text)
 
+    project_data = get_project_data(
+        sb3_file
+    )
+
+    payload = build_project_payload(
+        project_data
+    )
+
+    has_snapshot = any(
+        isinstance(m.get("content"), str)
+        and m["content"].startswith("Project data:")
+        for m in conversation_history
+    )
+
+    if not has_snapshot or payload != _last_sent_payload:
+        _drop_old_snapshots()
         user_prompt = (
             "Project data:\n"
-            + json.dumps(
-                project_data,
-                indent=2,
-                ensure_ascii=False
-            )
-            + "\n\nUser Request: "
+            + payload
+            + _REQUEST_MARKER
             + prompt_text
         )
-
+        snapshot_sent = True
     else:
-        project_data = get_project_data(
-            sb3_file
-        )
         user_prompt = prompt_text
+        snapshot_sent = False
 
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(conversation_history)
@@ -598,6 +603,9 @@ def ai_command_flow(
         return
 
     _append_assistant_message(response_text)
+
+    if snapshot_sent:
+        _last_sent_payload = payload
 
     mode, modifications = parse_ai_response(
         response_text
